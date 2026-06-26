@@ -210,8 +210,9 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 
 /* ---- empty-card actions: [+] new note / embed existing, top-left of a blank card ---- */
 
-/* Let the affordance sit just OUTSIDE the card without being clipped. */
-.canvas-node:has(> .canvas-pencil-card-actions) {
+/* Let the affordance sit just OUTSIDE the card without being clipped. The class
+   is toggled in JS (mountCardActions) to avoid :has selector invalidation cost. */
+.canvas-node.canvas-pencil-has-actions {
 	overflow: visible !important;
 }
 
@@ -683,7 +684,6 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 .canvas-node.canvas-pencil-text .markdown-preview-sizer {
 	overflow: visible !important;
 	contain: none !important;
-	clip-path: none !important;
 }
 
 /* Selection affordance ONLY: a ring drawn outside the box (outline never affects

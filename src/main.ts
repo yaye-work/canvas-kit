@@ -145,7 +145,7 @@ interface TextEditorHandle {
 
 let _measureCtx: CanvasRenderingContext2D | null = null;
 function measureTextLines(lines: string[], fontSize: number): number {
-	if (!_measureCtx) _measureCtx = document.createElement("canvas").getContext("2d");
+	if (!_measureCtx) _measureCtx = activeDocument.createElement("canvas").getContext("2d");
 	const ctx = _measureCtx;
 	if (!ctx) return fontSize * 4;
 	ctx.font = `${fontSize}px ${TEXT_FONT}`;
@@ -208,9 +208,9 @@ function tagTextNode(node: CanvasNodeLike, size: number, box: TextBox) {
 
 /** Read back a text node's base font size + box (with sensible defaults). */
 function textMeta(node: CanvasNodeLike): { size: number; baseW: number; baseH: number } {
-	const d = node.getData?.() ?? {};
-	const u = node.unknownData ?? {};
-	const num = (k: string) => Number((d as Record<string, unknown>)[k] ?? (u as Record<string, unknown>)[k]);
+	const d: Record<string, unknown> = node.getData?.() ?? {};
+	const u: Record<string, unknown> = node.unknownData ?? {};
+	const num = (k: string) => Number(d[k] ?? u[k]);
 	const size = num("pencilTextSize");
 	return {
 		size: size > 0 ? size : TEXT_DEFAULT_SIZE,
@@ -332,12 +332,12 @@ export default class CanvasPencilPlugin extends Plugin {
 	onunload() {
 		for (const tb of this.toolbars.values()) tb.destroy();
 		this.toolbars.clear();
-		document.body.removeClass("canvas-kit-hide-bottom-bar");
+		activeDocument.body.removeClass("canvas-kit-hide-bottom-bar");
 	}
 
 	/** Toggle a body class that hides Obsidian's bottom add-to-canvas bar. */
 	applyBottomBarVisibility() {
-		document.body.toggleClass("canvas-kit-hide-bottom-bar", this.settings.hideBottomBar);
+		activeDocument.body.toggleClass("canvas-kit-hide-bottom-bar", this.settings.hideBottomBar);
 	}
 
 	/** Re-apply the toolbar scale to every live canvas toolbar. */
@@ -346,7 +346,7 @@ export default class CanvasPencilPlugin extends Plugin {
 	}
 
 	getActiveCanvasView(): CanvasViewLike | null {
-		const view = this.app.workspace.getActiveViewOfType(ItemView) as CanvasViewLike | null;
+		const view = this.app.workspace.getActiveViewOfType<CanvasViewLike>(ItemView);
 		if (view && view.getViewType() === "canvas" && view.canvas) return view;
 		return null;
 	}
@@ -370,7 +370,7 @@ export default class CanvasPencilPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<CanvasPencilSettings>);
 	}
 
 	async saveSettings() {
@@ -484,6 +484,11 @@ class CanvasToolbar {
 	textSize: number; // default font size for new text (resize scales it after)
 	activeTextEditor: TextEditorHandle | null = null;
 
+	/** This view's document (stable across popout windows) for global listeners. */
+	private get doc(): Document {
+		return this.view.containerEl.ownerDocument;
+	}
+
 	private barEl: HTMLElement;
 	private subBarEl: HTMLElement | null = null;
 	private sizeSectionEl: HTMLElement | null = null;
@@ -572,7 +577,7 @@ class CanvasToolbar {
 		// Canvas swallows `contextmenu` on the textarea itself, so commit from a
 		// document-level capture listener whenever a text editor is active.
 		this.contextmenuHandler = () => this.activeTextEditor?.commit();
-		document.addEventListener("contextmenu", this.contextmenuHandler, true);
+		this.doc.addEventListener("contextmenu", this.contextmenuHandler, true);
 
 		this.refreshNodeStyles();
 	}
@@ -622,7 +627,7 @@ class CanvasToolbar {
 			this.overlay = new DragCreateOverlay(this, "image");
 			this.openImagePicker();
 		} else if (tool !== "select") {
-			this.overlay = new DragCreateOverlay(this, tool as "table" | "section");
+			this.overlay = new DragCreateOverlay(this, tool);
 		}
 	}
 
@@ -893,7 +898,7 @@ class CanvasToolbar {
 				this.closeCardSearch();
 			} else if (e.key === "Enter") {
 				e.preventDefault();
-				(list.querySelector(".canvas-pencil-card-search-item") as HTMLElement | null)?.click();
+				(list.querySelector<HTMLElement>(".canvas-pencil-card-search-item"))?.click();
 			}
 		});
 
@@ -905,7 +910,7 @@ class CanvasToolbar {
 			if (!pop.contains(e.target as Node)) this.closeCardSearch();
 		};
 		window.setTimeout(() => {
-			document.addEventListener("pointerdown", this.cardSearchOutside!, true);
+			this.doc.addEventListener("pointerdown", this.cardSearchOutside!, true);
 			input.focus();
 		}, 0);
 	}
@@ -967,7 +972,7 @@ class CanvasToolbar {
 
 	private closeCardSearch() {
 		if (this.cardSearchOutside) {
-			document.removeEventListener("pointerdown", this.cardSearchOutside, true);
+			this.doc.removeEventListener("pointerdown", this.cardSearchOutside, true);
 			this.cardSearchOutside = null;
 		}
 		this.cardSearchEl?.remove();
@@ -1058,7 +1063,7 @@ class CanvasToolbar {
 			if (!pop.contains(e.target as Node)) this.closeCardSearch();
 		};
 		window.setTimeout(() => {
-			document.addEventListener("pointerdown", this.cardSearchOutside!, true);
+			this.doc.addEventListener("pointerdown", this.cardSearchOutside!, true);
 			input.focus();
 		}, 0);
 	}
@@ -1066,7 +1071,7 @@ class CanvasToolbar {
 	/** Import a desktop image into the vault (attachment folder), then arm it. */
 	private pickImageUpload(arm: (file: TFile, dims: { w: number; h: number } | null) => void) {
 		const fileInput = createEl("input", { type: "file", attr: { accept: "image/*" } });
-		fileInput.addEventListener("change", async () => {
+		fileInput.addEventListener("change", () => void (async () => {
 			const f = fileInput.files?.[0];
 			if (!f) return;
 			try {
@@ -1094,7 +1099,7 @@ class CanvasToolbar {
 				console.error("Canvas Kit: couldn't upload image", err);
 				new Notice("Canvas Kit: couldn't upload that image.");
 			}
-		});
+		})());
 		fileInput.click();
 	}
 
@@ -1125,6 +1130,7 @@ class CanvasToolbar {
 	 * empty card's top-left, so a blank card can become a note without redrawing.
 	 */
 	private mountCardActions(node: CanvasNodeLike, el: HTMLElement) {
+		el.addClass("canvas-pencil-has-actions"); // lets the affordance overflow the card
 		if (el.querySelector(":scope > .canvas-pencil-card-actions")) return;
 		const bar = el.createDiv({ cls: "canvas-pencil-card-actions" });
 		const stop = (e: Event) => e.stopPropagation();
@@ -1139,11 +1145,11 @@ class CanvasToolbar {
 			attr: { "aria-label": "Turn into a new note" },
 		});
 		setIcon(plus, "file-plus");
-		plus.addEventListener("click", async (e) => {
+		plus.addEventListener("click", (e) => void (async () => {
 			stop(e);
 			const file = await this.makeNewNote();
 			if (file) this.replaceCardWithFile(node, file);
-		});
+		})());
 
 		const append = bar.createDiv({
 			cls: "canvas-pencil-card-action",
@@ -1157,6 +1163,7 @@ class CanvasToolbar {
 	}
 
 	private unmountCardActions(el: HTMLElement) {
+		el.removeClass("canvas-pencil-has-actions");
 		el.querySelector(":scope > .canvas-pencil-card-actions")?.remove();
 	}
 
@@ -1259,7 +1266,7 @@ class CanvasToolbar {
 				URL.revokeObjectURL(url);
 				// Downscale to a small square tile so the canvas file stays light.
 				const TILE = 96;
-				const c = document.createElement("canvas");
+				const c = activeDocument.createElement("canvas");
 				c.width = c.height = TILE;
 				const ctx = c.getContext("2d")!;
 				const s = Math.max(TILE / img.width, TILE / img.height);
@@ -1474,9 +1481,9 @@ class CanvasToolbar {
 		const w = Number(node.width) || meta.baseW;
 		const size = meta.baseW > 0 ? meta.size * (w / meta.baseW) : meta.size;
 		// Match the live text color (it rides Obsidian's node color).
-		const view = el.querySelector(
+		const view = el.querySelector<HTMLElement>(
 			".markdown-preview-view, .markdown-rendered, .markdown-embed-content"
-		) as HTMLElement | null;
+		);
 		const color = view ? getComputedStyle(view).color : null;
 		el.setCssStyles({ visibility: "hidden" });
 		this.openTextEditor(
@@ -1634,7 +1641,7 @@ class CanvasToolbar {
 					typeof node.text === "string"
 						? node.text
 						: typeof data.text === "string"
-							? (data.text as string)
+							? data.text
 							: "";
 				// Show the [+]/embed affordance only while an EMPTY card is selected
 				// (not permanently on every blank card).
@@ -1710,10 +1717,11 @@ class CanvasToolbar {
 		const el = node.nodeEl;
 		if (!el || el.style.visibility === "hidden") return;
 		// Measure the tight inner block (the sizer), not the flex-stretched preview.
-		const view = (el.querySelector(".markdown-preview-sizer") ??
-			el.querySelector(
+		const view =
+			el.querySelector<HTMLElement>(".markdown-preview-sizer") ??
+			el.querySelector<HTMLElement>(
 				".markdown-preview-view, .markdown-rendered, .markdown-embed-content"
-			)) as HTMLElement | null;
+			);
 		if (!view) return;
 		const w = Math.ceil(view.scrollWidth) + 1;
 		const h = Math.ceil(view.scrollHeight) + 1;
@@ -1735,7 +1743,7 @@ class CanvasToolbar {
 	/** Replace Obsidian's markdown preview of table nodes with our interactive table. */
 	private mountTableWidget(node: CanvasNodeLike, el: HTMLElement) {
 		if (el.hasClass("is-editing")) return;
-		const content = el.querySelector(".canvas-node-content") as HTMLElement | null;
+		const content = el.querySelector<HTMLElement>(".canvas-node-content");
 		if (!content) return;
 		let widget = this.tableWidgets.get(content);
 		if (!widget) {
@@ -1755,7 +1763,7 @@ class CanvasToolbar {
 		this.selectionObserver?.disconnect();
 		this.selectionObserver = null;
 		if (this.contextmenuHandler) {
-			document.removeEventListener("contextmenu", this.contextmenuHandler, true);
+			this.doc.removeEventListener("contextmenu", this.contextmenuHandler, true);
 			this.contextmenuHandler = null;
 		}
 		this.closeCardSearch();
@@ -2362,7 +2370,7 @@ class DragCreateOverlay extends ToolOverlay {
 		const headerCells = "|     ".repeat(cols) + "|";
 		const sepCells = "| --- ".repeat(cols) + "|";
 		const bodyRow = "|     ".repeat(cols) + "|";
-		const text = [headerCells, sepCells, ...Array(Math.max(1, rows - 1)).fill(bodyRow)].join(
+		const text = [headerCells, sepCells, ...Array<string>(Math.max(1, rows - 1)).fill(bodyRow)].join(
 			"\n"
 		);
 		// focus:false — focusing would open Obsidian's inline markdown editor.
@@ -2430,6 +2438,9 @@ class TableWidget {
 	private deleteBtnEl: HTMLElement | null = null;
 	private lineSelOutside: ((e: PointerEvent) => void) | null = null;
 	private lineSelKey: ((e: KeyboardEvent) => void) | null = null;
+	private get doc(): Document {
+		return this.nodeEl.ownerDocument;
+	}
 	private lastSyncedW = 0;
 	private lastSyncedH = 0;
 
@@ -2748,11 +2759,11 @@ class TableWidget {
 			Array.isArray(pr) && pr.length === rows ? pr.map((n) => Math.max(28, Number(n) || TABLE_CELL_H)) : [];
 		if (this.colW.length !== cols) {
 			const nw = this.node.width ?? cols * TABLE_CELL_W;
-			this.colW = Array(cols).fill(Math.max(50, Math.round(nw / cols)));
+			this.colW = Array<number>(cols).fill(Math.max(50, Math.round(nw / cols)));
 		}
 		if (this.rowH.length !== rows) {
 			const nh = this.node.height ?? rows * TABLE_CELL_H;
-			this.rowH = Array(rows).fill(Math.max(28, Math.round(nh / rows)));
+			this.rowH = Array<number>(rows).fill(Math.max(28, Math.round(nh / rows)));
 		}
 	}
 
@@ -2916,7 +2927,7 @@ class TableWidget {
 		td.addClass("is-editing-cell");
 		td.focus();
 		// Caret at end of existing content.
-		const range = document.createRange();
+		const range = activeDocument.createRange();
 		range.selectNodeContents(td);
 		range.collapse(false);
 		const sel = window.getSelection();
@@ -2963,7 +2974,7 @@ class TableWidget {
 		if (nr < 0 || nr >= this.cells.length) return;
 		// After save() the DOM is rebuilt; find the new cell next frame.
 		window.requestAnimationFrame(() => {
-			const table = this.content.querySelector(".cp-table") as HTMLTableElement | null;
+			const table = this.content.querySelector<HTMLTableElement>(".cp-table");
 			const td = table?.rows[nr]?.cells[nc];
 			if (td) this.editCell(td, nr, nc);
 		});
@@ -3114,7 +3125,7 @@ class TableWidget {
 		this.lineSelOutside = (ev: PointerEvent) => {
 			if (!root.contains(ev.target as Node)) this.clearLineSelection();
 		};
-		document.addEventListener("pointerdown", this.lineSelOutside, true);
+		this.doc.addEventListener("pointerdown", this.lineSelOutside, true);
 		// Delete / Backspace removes the selected line (and is kept from deleting the
 		// whole canvas node).
 		this.lineSelKey = (ev: KeyboardEvent) => {
@@ -3126,7 +3137,7 @@ class TableWidget {
 				this.clearLineSelection();
 			}
 		};
-		document.addEventListener("keydown", this.lineSelKey, true);
+		this.doc.addEventListener("keydown", this.lineSelKey, true);
 	}
 
 	/** The <td>s belonging to a given row or column. */
@@ -3163,11 +3174,11 @@ class TableWidget {
 		this.deleteBtnEl?.remove();
 		this.deleteBtnEl = null;
 		if (this.lineSelOutside) {
-			document.removeEventListener("pointerdown", this.lineSelOutside, true);
+			this.doc.removeEventListener("pointerdown", this.lineSelOutside, true);
 			this.lineSelOutside = null;
 		}
 		if (this.lineSelKey) {
-			document.removeEventListener("keydown", this.lineSelKey, true);
+			this.doc.removeEventListener("keydown", this.lineSelKey, true);
 			this.lineSelKey = null;
 		}
 	}
@@ -3268,7 +3279,7 @@ function sumArr(a: number[]): number {
  *  CSS on `.canvas-pencil-ink`; selection box-shadow is left alone. */
 function enforceInkVisual(el: HTMLElement, text: string) {
 	if (/<\s*script/i.test(text)) return;
-	const content = el.querySelector(".canvas-node-content") as HTMLElement | null;
+	const content = el.querySelector<HTMLElement>(".canvas-node-content");
 	if (!content) return;
 	// Obsidian's markdown renderer may render the svg itself, but buried in
 	// padded wrappers — only a bare direct child counts.
@@ -3376,7 +3387,7 @@ function buildStrokesSvg(strokes: PencilStroke[]): InkSvg | null {
 			// Flat chisel: constant-width stroked ribbon with flat (butt) ends.
 			if (stroke.worldPts.length < 2) continue;
 			const half = stroke.size / 2;
-			for (const [x, y] of stroke.worldPts) grow(x - half, y - half), grow(x + half, y + half);
+			for (const [x, y] of stroke.worldPts) { grow(x - half, y - half); grow(x + half, y + half); }
 			const d =
 				`M${r2(stroke.worldPts[0][0])} ${r2(stroke.worldPts[0][1])}` +
 				stroke.worldPts.slice(1).map(([x, y]) => `L${r2(x)} ${r2(y)}`).join("");
