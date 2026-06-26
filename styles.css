@@ -498,9 +498,9 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 }
 
 .canvas-node.canvas-pencil-ink .canvas-node-content {
-	background: transparent;
-	padding: 0;
-	overflow: visible;
+	background: transparent !important;
+	padding: 0 !important;
+	overflow: visible !important;
 }
 
 .canvas-node.canvas-pencil-ink .canvas-node-content .markdown-preview-view,

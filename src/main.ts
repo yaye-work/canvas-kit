@@ -56,12 +56,6 @@ const HIGHLIGHT_PALETTE = [
 
 const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 
-// Toggle verbose diagnostics by flipping this flag.
-const CP_DEBUG = false;
-function dbg(msg: string) {
-	if (CP_DEBUG) console.log(`[canvas-pencil] ${msg}`);
-}
-
 // ---------- Tape patterns ----------
 
 interface TapePattern {
@@ -403,10 +397,6 @@ function setSvg(el: HTMLElement, svg: string): boolean {
 	el.appendChild(el.ownerDocument.importNode(root, true));
 	return true;
 }
-const filled = (d: string, evenOdd = true) =>
-	svgIcon(
-		`<path ${evenOdd ? 'fill-rule="evenodd" clip-rule="evenodd" ' : ""}d="${d}" fill="currentColor"/>`
-	);
 // Multi-path icons (e.g. a card + its plus/magnifier overlay): every subpath is
 // filled with evenodd so cut-outs read as holes.
 const filledMulti = (...ds: string[]) =>
@@ -414,12 +404,6 @@ const filledMulti = (...ds: string[]) =>
 		ds
 			.map((d) => `<path fill-rule="evenodd" clip-rule="evenodd" d="${d}" fill="currentColor"/>`)
 			.join("")
-	);
-// Filled + matching stroke so the shape reads thicker (mirrors the mask-stroke
-// the source SVG uses to bolden a thin outline).
-const filledThick = (d: string, sw = 1.4) =>
-	svgIcon(
-		`<path fill-rule="evenodd" clip-rule="evenodd" d="${d}" fill="currentColor" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`
 	);
 
 // Turn a toolbar icon into a CSS cursor: give it an explicit pixel size (cursors
@@ -607,7 +591,7 @@ class CanvasToolbar {
 	/** Scale the toolbar per the user's setting (anchored top-center). */
 	applyScale() {
 		const s = this.plugin.settings.toolbarScale || 1;
-		this.barEl.style.transformOrigin = "top center";
+		this.barEl.setCssStyles({ transformOrigin: "top center" });
 		this.barEl.style.transform = `translateX(-50%) scale(${s})`;
 	}
 
@@ -666,7 +650,7 @@ class CanvasToolbar {
 		if (this.tool === "marker") {
 			const svg = MARKER_MODES.find((m) => m.id === this.markerMode)?.svg;
 			if (!svg) {
-				wrap.style.cursor = "auto";
+				wrap.setCssStyles({ cursor: "auto" });
 			} else if (this.markerMode === "erase") {
 				wrap.style.cursor = svgToCursor(svg, 12, 12, this.iconSizePx()); // upright
 			} else {
@@ -1410,7 +1394,7 @@ class CanvasToolbar {
 								moveAndResize?: (r: TextBox) => void;
 							};
 							resizable.moveAndResize?.(box);
-							if (existingNode.nodeEl) existingNode.nodeEl.style.visibility = "";
+							if (existingNode.nodeEl) existingNode.nodeEl.setCssStyles({ visibility: "" });
 							target = existingNode;
 						}
 					} else if (!empty) {
@@ -1438,7 +1422,7 @@ class CanvasToolbar {
 					if (target) this.fitTextNode(target);
 				};
 				this.refreshNodeStyles();
-				requestAnimationFrame(settle);
+				window.requestAnimationFrame(settle);
 				window.setTimeout(settle, 80);
 				window.setTimeout(settle, 250);
 				onClose?.();
@@ -1494,7 +1478,7 @@ class CanvasToolbar {
 			".markdown-preview-view, .markdown-rendered, .markdown-embed-content"
 		) as HTMLElement | null;
 		const color = view ? getComputedStyle(view).color : null;
-		el.style.visibility = "hidden";
+		el.setCssStyles({ visibility: "hidden" });
 		this.openTextEditor(
 			{ x: node.x ?? 0, y: node.y ?? 0 },
 			size,
@@ -1948,7 +1932,7 @@ class MarkerOverlay extends ToolOverlay {
 		};
 		el.addEventListener("pointerup", end);
 		el.addEventListener("pointercancel", end);
-		el.addEventListener("wheel", () => requestAnimationFrame(() => this.redraw()), {
+		el.addEventListener("wheel", () => window.requestAnimationFrame(() => this.redraw()), {
 			passive: true,
 		});
 		// Right-click ends drawing: finalize anything in progress, leave the tool.
@@ -2123,7 +2107,7 @@ class TextEditOverlay extends ToolOverlay {
 			hint.hide();
 			// Let further clicks reach the canvas (pan / commit-on-click-away)
 			// while the inline editor is open.
-			this.el.style.pointerEvents = "none";
+			this.el.setCssStyles({ pointerEvents: "none" });
 			const close = () => this.tb.revertToSelect();
 			// Clicking an existing text node edits it in place; otherwise place new.
 			const hit = this.tb.findTextNodeAt(w);
@@ -2267,7 +2251,7 @@ class DragCreateOverlay extends ToolOverlay {
 		};
 		// The group's DOM mounts async — retry until the label exists.
 		if (tryEdit()) return;
-		requestAnimationFrame(tryEdit);
+		window.requestAnimationFrame(tryEdit);
 		window.setTimeout(tryEdit, 60);
 		window.setTimeout(tryEdit, 200);
 	}
@@ -2340,7 +2324,7 @@ class DragCreateOverlay extends ToolOverlay {
 			canvas.requestSave?.();
 			// Mount the [+]/embed affordance on the fresh empty card right away.
 			this.tb.refreshNodeStyles();
-			requestAnimationFrame(() => this.tb.refreshNodeStyles());
+			window.requestAnimationFrame(() => this.tb.refreshNodeStyles());
 			window.setTimeout(() => this.tb.refreshNodeStyles(), 120);
 			return;
 		}
@@ -2396,7 +2380,7 @@ class DragCreateOverlay extends ToolOverlay {
 			// own render settles, so the markdown preview never shows.
 			const tb = this.tb;
 			tb.refreshNodeStyles();
-			requestAnimationFrame(() => tb.refreshNodeStyles());
+			window.requestAnimationFrame(() => tb.refreshNodeStyles());
 			window.setTimeout(() => tb.refreshNodeStyles(), 80);
 			window.setTimeout(() => tb.refreshNodeStyles(), 300);
 		}
@@ -2525,7 +2509,7 @@ class TableWidget {
 				});
 				// Content growth changes row heights — keep chrome aligned.
 				td.addEventListener("input", () =>
-					requestAnimationFrame(() => this.layout())
+					window.requestAnimationFrame(() => this.layout())
 				);
 			});
 		});
@@ -2621,7 +2605,7 @@ class TableWidget {
 		this.bindChromeTracker();
 		this.hideChrome();
 
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			this.layout();
 			this.syncNodeSize();
 		});
@@ -2736,15 +2720,15 @@ class TableWidget {
 			const cell = t.rows[0]?.cells[boundary];
 			if (!cell) return;
 			line.style.left = `${cell.offsetLeft + cell.offsetWidth - 1.5}px`;
-			line.style.top = "0px";
-			line.style.width = "3px";
+			line.setCssStyles({ top: "0px" });
+			line.setCssStyles({ width: "3px" });
 			line.style.height = `${t.offsetHeight}px`;
 		} else {
 			const tr = t.rows[boundary];
 			if (!tr) return;
 			line.style.top = `${tr.offsetTop + tr.offsetHeight - 1.5}px`;
-			line.style.left = "0px";
-			line.style.height = "3px";
+			line.setCssStyles({ left: "0px" });
+			line.setCssStyles({ height: "3px" });
 			line.style.width = `${t.offsetWidth}px`;
 		}
 		line.show();
@@ -2793,12 +2777,12 @@ class TableWidget {
 		const th = t.offsetHeight;
 		if (this.addColEl) {
 			this.addColEl.style.left = `${tw + 6}px`;
-			this.addColEl.style.top = "0px";
+			this.addColEl.setCssStyles({ top: "0px" });
 			this.addColEl.style.height = `${th}px`;
 		}
 		if (this.addRowEl) {
 			this.addRowEl.style.top = `${th + 6}px`;
-			this.addRowEl.style.left = "0px";
+			this.addRowEl.setCssStyles({ left: "0px" });
 			this.addRowEl.style.width = `${tw}px`;
 		}
 		const first = t.rows[0];
@@ -2810,7 +2794,7 @@ class TableWidget {
 			const cell = first?.cells[i];
 			if (cell) {
 				d.style.left = `${cell.offsetLeft + cell.offsetWidth - 3}px`;
-				d.style.top = "0px";
+				d.setCssStyles({ top: "0px" });
 				d.style.height = `${th}px`;
 			}
 		});
@@ -2822,7 +2806,7 @@ class TableWidget {
 			const tr = t.rows[r];
 			if (tr) {
 				d.style.top = `${tr.offsetTop + tr.offsetHeight - 3}px`;
-				d.style.left = "0px";
+				d.setCssStyles({ left: "0px" });
 				d.style.width = `${tw}px`;
 			}
 		});
@@ -2832,14 +2816,14 @@ class TableWidget {
 			const cell = first?.cells[i];
 			if (cell) {
 				d.style.left = `${cell.offsetLeft + cell.offsetWidth}px`;
-				d.style.top = "-12px";
+				d.setCssStyles({ top: "-12px" });
 			}
 		});
 		this.insertRowDots.forEach((d, r) => {
 			const tr = t.rows[r];
 			if (tr) {
 				d.style.top = `${tr.offsetTop + tr.offsetHeight}px`;
-				d.style.left = "-12px";
+				d.setCssStyles({ left: "-12px" });
 			}
 		});
 		this.positionDeleteBtn(); // follow the handle as the grid re-lays out
@@ -2978,7 +2962,7 @@ class TableWidget {
 		if (nc < 0) { nc = this.cells[0].length - 1; nr--; }
 		if (nr < 0 || nr >= this.cells.length) return;
 		// After save() the DOM is rebuilt; find the new cell next frame.
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			const table = this.content.querySelector(".cp-table") as HTMLTableElement | null;
 			const td = table?.rows[nr]?.cells[nc];
 			if (td) this.editCell(td, nr, nc);
@@ -3019,10 +3003,10 @@ class TableWidget {
 				if (!ghost) return;
 				const rr = this.rootEl!.getBoundingClientRect();
 				if (axis === "row") {
-					ghost.style.left = "0px";
+					ghost.setCssStyles({ left: "0px" });
 					ghost.style.top = `${(ev.clientY - rr.top) / scale - ghost.offsetHeight / 2}px`;
 				} else {
-					ghost.style.top = "0px";
+					ghost.setCssStyles({ top: "0px" });
 					ghost.style.left = `${(ev.clientX - rr.left) / scale - ghost.offsetWidth / 2}px`;
 				}
 			};
@@ -3162,10 +3146,10 @@ class TableWidget {
 		// Sit just beyond the handle (which is already outside the grid edge).
 		if (sel.axis === "row") {
 			btn.style.top = handle.style.top;
-			btn.style.left = "-34px";
+			btn.setCssStyles({ left: "-34px" });
 		} else {
 			btn.style.left = handle.style.left;
-			btn.style.top = "-34px";
+			btn.setCssStyles({ top: "-34px" });
 		}
 	}
 
@@ -3233,7 +3217,7 @@ class TableWidget {
 			});
 			g.style.width = `${t.rows[0]?.cells[index]?.offsetWidth ?? TABLE_CELL_W}px`;
 		}
-		gt.style.width = "100%";
+		gt.setCssStyles({ width: "100%" });
 		return g;
 	}
 
@@ -3279,15 +3263,11 @@ function sumArr(a: number[]): number {
 	return a.reduce((s, n) => s + n, 0);
 }
 
-/** Frameless ink, enforced inline so no theme or re-render can re-card it.
- *  Selection box-shadow is left alone — that's Obsidian's focus/resize UI. */
+/** Frameless ink: re-assert the bare SVG after Obsidian re-renders the node.
+ *  The frameless chrome (no border/background/padding, overflow visible) lives in
+ *  CSS on `.canvas-pencil-ink`; selection box-shadow is left alone. */
 function enforceInkVisual(el: HTMLElement, text: string) {
 	if (/<\s*script/i.test(text)) return;
-	const container = el.querySelector(".canvas-node-container") as HTMLElement | null;
-	if (container) {
-		container.style.setProperty("border", "none", "important");
-		container.style.setProperty("background", "transparent", "important");
-	}
 	const content = el.querySelector(".canvas-node-content") as HTMLElement | null;
 	if (!content) return;
 	// Obsidian's markdown renderer may render the svg itself, but buried in
@@ -3296,9 +3276,6 @@ function enforceInkVisual(el: HTMLElement, text: string) {
 	const isBareSvg =
 		content.children.length === 1 && direct?.tagName.toLowerCase() === "svg";
 	if (!isBareSvg) setSvg(content, text);
-	content.style.setProperty("padding", "0", "important");
-	content.style.setProperty("background", "transparent", "important");
-	content.style.setProperty("overflow", "visible", "important");
 }
 
 function blockDblClick(el: HTMLElement) {
@@ -3582,7 +3559,6 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 				s
 					.setLimits(2, 30, 1)
 					.setValue(this.plugin.settings.strokeSize)
-					.setDynamicTooltip()
 					.onChange(async (v) => {
 						this.plugin.settings.strokeSize = v;
 						await this.plugin.saveSettings();
@@ -3596,7 +3572,6 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 				s
 					.setLimits(8, 120, 2)
 					.setValue(this.plugin.settings.textSize)
-					.setDynamicTooltip()
 					.onChange(async (v) => {
 						this.plugin.settings.textSize = v;
 						await this.plugin.saveSettings();
@@ -3610,7 +3585,6 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 				s
 					.setLimits(70, 160, 5)
 					.setValue(Math.round((this.plugin.settings.toolbarScale || 1) * 100))
-					.setDynamicTooltip()
 					.onChange(async (v) => {
 						this.plugin.settings.toolbarScale = v / 100;
 						await this.plugin.saveSettings();
