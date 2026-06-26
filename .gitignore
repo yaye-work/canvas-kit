@@ -1,0 +1,10 @@
+node_modules/
+main.js
+*.log
+.DS_Store
+
+# Obsidian runtime plugin data (settings), not source
+data.json
+
+# local backups
+backups/

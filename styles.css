@@ -1,0 +1,1013 @@
+/* Optional (setting): hide Obsidian's bottom add-to-canvas bar. */
+body.canvas-kit-hide-bottom-bar .canvas-card-menu {
+	display: none !important;
+}
+
+/* While a Canvas Kit table is selected, hide Obsidian's floating node menu —
+   it sits above the node and covers the table's top column-reorder handles.
+   (.canvas-menu = the per-node popup; .canvas-card-menu is the bottom bar.) */
+.canvas-kit-table-selected .canvas-menu {
+	display: none !important;
+}
+
+/* ---- main toolbar (always visible, top center) ---- */
+
+.canvas-pencil-bar {
+	position: absolute;
+	top: 16px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 110;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 8px;
+	cursor: default; /* restore normal pointer over the bar, not the tool cursor */
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-l);
+	box-shadow: var(--shadow-s);
+}
+
+.canvas-pencil-tool {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	color: var(--text-muted);
+}
+
+.canvas-pencil-tool:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.canvas-pencil-tool.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+/* ---- marker sub toolbar: [modes] | [size] | [colors or tape patterns] ---- */
+
+.canvas-pencil-subbar {
+	position: absolute;
+	top: 66px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 110;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 12px;
+	cursor: default; /* restore normal pointer over the sub-bar, not the tool cursor */
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-l);
+	box-shadow: var(--shadow-s);
+}
+
+.canvas-pencil-section {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+/* eraser active: size + style sections greyed out */
+.canvas-pencil-section.is-disabled {
+	opacity: 0.35;
+	pointer-events: none;
+}
+
+.canvas-pencil-divider {
+	width: 1px;
+	height: 22px;
+	background: var(--background-modifier-border);
+}
+
+.canvas-pencil-mode {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	color: var(--text-muted);
+}
+
+.canvas-pencil-mode:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.canvas-pencil-mode.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+/* color presets + tape pattern swatches */
+
+.canvas-pencil-swatches {
+	gap: 6px;
+}
+
+.canvas-pencil-swatch {
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	cursor: pointer;
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: 0 0 0 2px transparent;
+	box-sizing: border-box;
+}
+
+.canvas-pencil-swatch.is-active,
+.canvas-pencil-wheel.is-active,
+.canvas-pencil-tape-custom.is-active {
+	box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--interactive-accent);
+}
+
+/* color wheel (custom color) */
+
+.canvas-pencil-wheel {
+	position: relative;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	cursor: pointer;
+	background: conic-gradient(
+		#e03e3e, #f08c28, #f5c731, #5bb98c, #4f9ddb, #7d5bd6, #e03e3e
+	);
+}
+
+.canvas-pencil-wheel input[type="color"] {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	cursor: pointer;
+	padding: 0;
+	border: none;
+}
+
+/* custom tape image slot ("+" or the user's image) */
+
+.canvas-pencil-tape-custom {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	cursor: pointer;
+	border: 1px solid var(--background-modifier-border);
+	box-sizing: border-box;
+	color: var(--text-muted);
+	background-size: cover;
+	background-position: center;
+}
+
+.canvas-pencil-tape-custom:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover);
+}
+
+.canvas-pencil-tape-custom svg {
+	width: 12px;
+	height: 12px;
+}
+
+/* size popup */
+
+.canvas-pencil-size-popup {
+	position: absolute;
+	transform: translateX(-50%);
+	z-index: 120;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	cursor: default;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-l);
+	box-shadow: var(--shadow-s);
+}
+
+.canvas-pencil-size-popup input[type="range"] {
+	width: 120px;
+}
+
+.canvas-pencil-size-preview {
+	border-radius: 50%;
+	background: var(--text-normal);
+	flex-shrink: 0;
+}
+
+/* ---- empty-card actions: [+] new note / embed existing, top-left of a blank card ---- */
+
+/* Let the affordance sit just OUTSIDE the card without being clipped. */
+.canvas-node:has(> .canvas-pencil-card-actions) {
+	overflow: visible !important;
+}
+
+.canvas-pencil-card-actions {
+	position: absolute;
+	top: 0;
+	right: calc(100% + 8px); /* just outside the card's LEFT edge */
+	left: auto;
+	z-index: 115;
+	display: flex;
+	flex-direction: column; /* stacked vertically */
+	gap: 4px;
+	padding: 4px;
+	cursor: default;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+}
+
+.canvas-pencil-card-action {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	color: var(--text-muted);
+}
+
+.canvas-pencil-card-action:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.canvas-pencil-card-action svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* ---- inline note picker, anchored to a card ---- */
+
+.canvas-pencil-card-search {
+	position: absolute;
+	z-index: 125;
+	width: 260px;
+	max-width: 60vw;
+	padding: 8px;
+	cursor: default;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-l);
+	box-shadow: var(--shadow-l);
+}
+
+.canvas-pencil-card-search input {
+	width: 100%;
+	margin-bottom: 6px;
+}
+
+.canvas-pencil-card-search-list {
+	display: flex;
+	flex-direction: column;
+	max-height: 240px;
+	overflow-y: auto;
+}
+
+.canvas-pencil-card-search-item {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 5px 8px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+}
+
+.canvas-pencil-card-search-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.canvas-pencil-card-search-name {
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.canvas-pencil-card-search-path {
+	margin-left: auto;
+	font-size: var(--font-smaller);
+	color: var(--text-faint);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.canvas-pencil-card-search-empty {
+	padding: 8px;
+	color: var(--text-muted);
+	text-align: center;
+}
+
+/* ---- image picker (previewable search + upload) ---- */
+
+.canvas-pencil-image-picker {
+	width: 320px;
+	max-width: 80vw;
+}
+
+.canvas-pencil-image-top {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.canvas-pencil-image-top input {
+	flex: 1;
+	min-width: 0;
+}
+
+.canvas-pencil-image-upload {
+	flex-shrink: 0;
+	cursor: pointer;
+}
+
+.canvas-pencil-image-grid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 6px;
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+.canvas-pencil-image-cell {
+	position: relative;
+	aspect-ratio: 1;
+	border-radius: var(--radius-s);
+	overflow: hidden;
+	cursor: pointer;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+}
+
+.canvas-pencil-image-cell:hover {
+	border-color: var(--interactive-accent);
+}
+
+.canvas-pencil-image-cell img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+/* ---- tool overlays ---- */
+
+.canvas-pencil-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 100;
+	touch-action: none;
+	outline: none;
+}
+
+.canvas-pencil-overlay-marker canvas {
+	position: absolute;
+	inset: 0;
+	cursor: inherit; /* show the tool-icon cursor set on the canvas wrapper */
+}
+
+/* live tape preview while dragging (real pattern, not a color block) */
+
+.canvas-pencil-tape-preview {
+	position: absolute;
+	pointer-events: none;
+	z-index: 101;
+}
+
+.canvas-pencil-tape-preview svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.canvas-pencil-overlay-marker.is-erasing canvas {
+	cursor: inherit;
+}
+
+.canvas-pencil-overlay-place {
+	cursor: inherit;
+}
+
+/* ---- inline text editor (Excalidraw-style transparent textarea) ---- */
+
+.canvas-pencil-text-editor {
+	position: absolute;
+	margin: 0;
+	border: none;
+	outline: none;
+	background: transparent;
+	box-shadow: none;
+	border-radius: 0;
+	resize: none;
+	overflow: hidden;
+	white-space: pre;
+	box-sizing: content-box;
+	min-width: 4px;
+	z-index: 130;
+	-webkit-font-smoothing: antialiased;
+}
+
+.canvas-pencil-text-editor:focus {
+	outline: none;
+	box-shadow: none;
+}
+
+.canvas-pencil-size-label {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 22px;
+	padding: 0 2px;
+	font-size: 12px;
+	color: var(--text-muted);
+	user-select: none;
+}
+
+.canvas-pencil-hint {
+	position: absolute;
+	padding: 2px 8px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	pointer-events: none;
+	white-space: nowrap;
+}
+
+.canvas-pencil-overlay-section {
+	cursor: inherit;
+}
+
+.canvas-pencil-marquee {
+	position: absolute;
+	border: 2px dashed var(--interactive-accent);
+	background: hsla(var(--interactive-accent-hsl), 0.08);
+	border-radius: var(--radius-s);
+	pointer-events: none;
+}
+
+/* table marquee: live row/column grid preview (cell size set from JS) */
+.canvas-pencil-marquee-table {
+	background-image:
+		linear-gradient(hsla(var(--interactive-accent-hsl), 0.6) 1px, transparent 1px),
+		linear-gradient(90deg, hsla(var(--interactive-accent-hsl), 0.6) 1px, transparent 1px);
+}
+
+/* ---- ink nodes: frameless, no padding, svg fills the node ---- */
+
+.canvas-node.canvas-pencil-ink .canvas-node-container {
+	border: none !important;
+	background: transparent !important;
+}
+
+/* Recolor strokes via Obsidian's node color: the toolbar's color button sets
+   --canvas-color, which we apply to the svg's currentColor (marker fill /
+   highlighter stroke). Uncolored strokes keep their drawn color (inline style). */
+.canvas-node.canvas-pencil-ink[class*="mod-canvas-color"] .canvas-node-content svg,
+.canvas-node.canvas-pencil-ink[style*="--canvas-color"] .canvas-node-content svg {
+	color: rgb(var(--canvas-color)) !important;
+}
+
+/* hide the resting shadow but keep Obsidian's focus/selection shadow alive —
+   that's what makes the resize state visible and grabbable */
+.canvas-node.canvas-pencil-ink:not(.is-focused) .canvas-node-container {
+	box-shadow: none !important;
+}
+
+.canvas-node.canvas-pencil-ink.is-focused .canvas-node-container {
+	box-shadow: 0 0 0 2px var(--interactive-accent) !important;
+}
+
+.canvas-node.canvas-pencil-ink .canvas-node-content {
+	background: transparent;
+	padding: 0;
+	overflow: visible;
+}
+
+.canvas-node.canvas-pencil-ink .canvas-node-content .markdown-preview-view,
+.canvas-node.canvas-pencil-ink .canvas-node-content .markdown-embed-content {
+	padding: 0;
+	background: transparent;
+}
+
+.canvas-node.canvas-pencil-ink .canvas-node-content svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+/* ---- borderless text / table nodes (no frame, no background, no padding) ----
+   !important: Obsidian (and themes) style the editing state with equal or
+   higher specificity — text must never look like a card, even while typing. */
+
+.canvas-node.canvas-pencil-plain .canvas-node-container {
+	border: none !important;
+	background: transparent !important;
+	box-shadow: none !important;
+}
+
+.canvas-node.canvas-pencil-plain .canvas-node-content {
+	background: transparent !important;
+	padding: 0 !important;
+}
+
+.canvas-node.canvas-pencil-plain .canvas-node-content .markdown-preview-view,
+.canvas-node.canvas-pencil-plain .canvas-node-content .markdown-source-view,
+.canvas-node.canvas-pencil-plain .canvas-node-content .markdown-embed-content {
+	padding: 0 !important;
+	background: transparent !important;
+}
+
+.canvas-node.canvas-pencil-plain .canvas-node-content .cm-editor,
+.canvas-node.canvas-pencil-plain .canvas-node-content .cm-scroller,
+.canvas-node.canvas-pencil-plain .canvas-node-content .cm-content,
+.canvas-node.canvas-pencil-plain .canvas-node-content .cm-line {
+	padding: 0 !important;
+	background: transparent !important;
+}
+
+/* ---- point text: rendered markdown that hugs its glyphs ---- */
+
+/* Font size is driven by --cp-text-size (set on the node element so resizing
+   scales the text uniformly). */
+.canvas-node.canvas-pencil-text {
+	--cp-text-size: 20px;
+}
+
+/* Font + size + tight line height. The preview must HUG its content, not
+   stretch: Obsidian makes it a flex column that fills the node (→ trailing
+   space), so force block + auto height. */
+.canvas-node.canvas-pencil-text .canvas-node-content .markdown-preview-view,
+.canvas-node.canvas-pencil-text .canvas-node-content .markdown-rendered {
+	display: block !important;
+	height: auto !important;
+	font-size: var(--cp-text-size) !important;
+	line-height: 1.2 !important;
+	font-family: var(--cp-text-font, "Helvetica Neue", Helvetica, Arial, sans-serif) !important;
+	color: var(--text-normal) !important;
+}
+
+/* no-wrap (NOT pre): a <br> still breaks lines, but the literal newline Obsidian
+   emits after each <br> collapses instead of rendering a SECOND doubled break.
+   Tight line-height on every descendant kills oversized leading. */
+.canvas-node.canvas-pencil-text .markdown-preview-view,
+.canvas-node.canvas-pencil-text .markdown-preview-view * {
+	white-space: nowrap !important;
+	line-height: 1.2 !important;
+}
+
+/* Strip ALL wrapper spacing — sizers, .el-* blocks, sections, paragraph
+   spacing, and Obsidian's tall sizer min-height. */
+.canvas-node.canvas-pencil-text .markdown-embed-content,
+.canvas-node.canvas-pencil-text .markdown-preview-view,
+.canvas-node.canvas-pencil-text .markdown-preview-view *:not(br) {
+	margin: 0 !important;
+	padding: 0 !important;
+	min-height: 0 !important;
+	--p-spacing: 0 !important;
+}
+
+/* Headings scale with the node's font (--cp-text-size) instead of the theme's
+   fixed --hN-size, so resizing keeps the whole block uniform AND the h1…h6
+   hierarchy is preserved. Must come AFTER the strip-spacing rule above. */
+.canvas-node.canvas-pencil-text .markdown-preview-view h1 {
+	font-size: calc(var(--cp-text-size) * 2) !important;
+	font-weight: 700 !important;
+}
+.canvas-node.canvas-pencil-text .markdown-preview-view h2 {
+	font-size: calc(var(--cp-text-size) * 1.6) !important;
+	font-weight: 700 !important;
+}
+.canvas-node.canvas-pencil-text .markdown-preview-view h3 {
+	font-size: calc(var(--cp-text-size) * 1.35) !important;
+	font-weight: 700 !important;
+}
+.canvas-node.canvas-pencil-text .markdown-preview-view h4 {
+	font-size: calc(var(--cp-text-size) * 1.15) !important;
+	font-weight: 700 !important;
+}
+.canvas-node.canvas-pencil-text .markdown-preview-view h5 {
+	font-size: var(--cp-text-size) !important;
+	font-weight: 700 !important;
+}
+.canvas-node.canvas-pencil-text .markdown-preview-view h6 {
+	font-size: calc(var(--cp-text-size) * 0.9) !important;
+	font-weight: 700 !important;
+	color: inherit !important;
+}
+
+/* Lists need their marker + indent back (the strip-spacing rule zeroed padding). */
+.canvas-node.canvas-pencil-text .markdown-preview-view ul,
+.canvas-node.canvas-pencil-text .markdown-preview-view ol {
+	padding-left: 1.6em !important;
+	list-style-position: outside !important;
+}
+.canvas-node.canvas-pencil-text .markdown-preview-view ul {
+	list-style-type: disc !important;
+}
+.canvas-node.canvas-pencil-text .markdown-preview-view ol {
+	list-style-type: decimal !important;
+}
+/* A small gap so the bullet/number never touches the first glyph. */
+.canvas-node.canvas-pencil-text .markdown-preview-view li {
+	padding-left: 0.25em !important;
+}
+/* Checkboxes: drop the duplicate disc marker on task items and give the
+   checkbox right-margin back (the strip-spacing rule zeroed it → it overlapped
+   the text). */
+.canvas-node.canvas-pencil-text .markdown-preview-view .task-list-item {
+	list-style: none !important;
+}
+.canvas-node.canvas-pencil-text .markdown-preview-view .task-list-item-checkbox {
+	margin: 0 0.45em 0 0 !important;
+	vertical-align: middle;
+}
+
+/* Text color rides Obsidian's own node color: the toolbar's color button sets
+   --canvas-color on the node (via a mod-canvas-color-N class for presets, or
+   inline style for custom hex), which we route onto the TEXT — the card itself
+   stays transparent via .canvas-pencil-plain. */
+.canvas-node.canvas-pencil-text[class*="mod-canvas-color"] .canvas-node-content .markdown-preview-view,
+.canvas-node.canvas-pencil-text[class*="mod-canvas-color"] .canvas-node-content .markdown-rendered,
+.canvas-node.canvas-pencil-text[style*="--canvas-color"] .canvas-node-content .markdown-preview-view,
+.canvas-node.canvas-pencil-text[style*="--canvas-color"] .canvas-node-content .markdown-rendered {
+	color: rgb(var(--canvas-color)) !important;
+}
+
+/* Text is PURE TEXT — never a card. Kill every frame/background/shadow/outline
+   in every state (rest, hover, selected, editing). Obsidian's drag-selection
+   handles still appear so the node stays resizable/movable. */
+.canvas-node.canvas-pencil-text,
+.canvas-node.canvas-pencil-text:hover,
+.canvas-node.canvas-pencil-text.is-focused,
+.canvas-node.canvas-pencil-text.is-selected,
+.canvas-node.canvas-pencil-text.is-editing,
+.canvas-node.canvas-pencil-text .canvas-node-container,
+.canvas-node.canvas-pencil-text:hover .canvas-node-container,
+.canvas-node.canvas-pencil-text.is-focused .canvas-node-container,
+.canvas-node.canvas-pencil-text.is-selected .canvas-node-container,
+.canvas-node.canvas-pencil-text.is-editing .canvas-node-container,
+.canvas-node.canvas-pencil-text .canvas-node-content {
+	border: none !important;
+	outline: none !important;
+	background: transparent !important;
+	box-shadow: none !important;
+	border-radius: 0 !important; /* sharp corners in every state */
+}
+
+/* Like Photoshop point text: the box never clips the glyphs. Text always shows
+   in full even if it spills past the node's bounds. */
+.canvas-node.canvas-pencil-text,
+.canvas-node.canvas-pencil-text .canvas-node-container,
+.canvas-node.canvas-pencil-text .canvas-node-content,
+.canvas-node.canvas-pencil-text .markdown-preview-view,
+.canvas-node.canvas-pencil-text .markdown-preview-sizer {
+	overflow: visible !important;
+	contain: none !important;
+	clip-path: none !important;
+}
+
+/* Selection affordance ONLY: a ring drawn outside the box (outline never affects
+   layout, so it can't clip the text). The box hugs the glyphs, so the ring does
+   too. Resize handles ride along with selection. */
+.canvas-node.canvas-pencil-text.is-focused .canvas-node-container,
+.canvas-node.canvas-pencil-text.is-selected .canvas-node-container {
+	outline: 1.5px solid var(--interactive-accent) !important;
+	outline-offset: 0;
+	border-radius: 0 !important; /* sharp corners — the outline follows this */
+}
+
+/* ---- interactive table widget ---- */
+
+/* Unclip the node so the +/reorder pills outside its edges stay visible. */
+.canvas-node.canvas-pencil-table .canvas-node-container,
+.canvas-node.canvas-pencil-table .canvas-node-content {
+	overflow: visible !important;
+	contain: none !important;
+}
+
+/* Clear selection ring (the frameless styling removed the native focus border). */
+.canvas-node.canvas-pencil-table.is-focused .canvas-node-container {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
+	border-radius: 0;
+}
+
+.cp-table-root {
+	position: relative;
+	width: 100%;
+	height: 100%;
+}
+
+.cp-table {
+	/* Width set from stored column sizes; rows grow with their content. */
+	table-layout: fixed;
+	border-collapse: collapse;
+	background: var(--background-primary);
+	margin: 0;
+}
+
+.cp-table td {
+	border: 1px solid var(--background-modifier-border);
+	padding: 4px 8px;
+	vertical-align: top;
+	font-size: var(--font-text-size);
+	color: var(--text-normal);
+	white-space: pre-wrap;
+	word-break: break-word;
+	cursor: default;
+	outline: none;
+}
+
+.cp-table td.is-editing-cell {
+	cursor: text;
+	box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+
+.cp-table tr.cp-drop-target td,
+.cp-table td.cp-drop-target {
+	background: hsla(var(--interactive-accent-hsl), 0.12);
+}
+
+/* "+" pills on the right and bottom edges (visible on hover/selection) */
+
+.cp-table-add {
+	position: absolute;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-radius: var(--radius-m);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 120ms ease;
+	box-shadow: var(--shadow-s);
+}
+
+.cp-table-add svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* positions are set from measured table geometry in JS */
+.cp-table-add-col {
+	width: 20px;
+}
+
+.cp-table-add-row {
+	height: 20px;
+}
+
+/* chrome appears only near the pointer while the table is selected */
+.cp-table-add.is-visible {
+	opacity: 1;
+}
+
+/* reorder handles: pills on the top (columns) and left (rows) edges */
+
+/* reorder handles: tiny pills centered on the same axis line as the insert
+   dots (12px out from the table edge); hover becomes a square grip with a
+   pair of parallel lines, FigJam-style */
+
+.cp-table-handle {
+	position: absolute;
+	background: hsla(var(--interactive-accent-hsl), 0.55);
+	border-radius: 3px;
+	opacity: 0;
+	transform: translate(-50%, -50%);
+	transition: opacity 120ms ease, width 100ms ease, height 100ms ease,
+		background 100ms ease;
+	z-index: 2;
+	cursor: grab;
+}
+
+.cp-table-handle-col {
+	top: -12px;
+	width: 16px;
+	height: 6px;
+}
+
+.cp-table-handle-row {
+	left: -12px;
+	width: 6px;
+	height: 16px;
+}
+
+.cp-table-handle:hover,
+.cp-table-handle.is-dragging,
+.cp-table-handle.is-selected {
+	background: var(--interactive-accent);
+	width: 16px;
+	height: 16px;
+}
+
+.cp-table-handle.is-dragging {
+	cursor: grabbing;
+}
+
+/* selected row/column: tint the cells + show the delete button */
+.cp-table td.cp-line-selected {
+	background: hsla(var(--interactive-accent-hsl), 0.14);
+}
+
+.cp-table-delete {
+	position: absolute;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-s);
+	color: var(--text-error);
+	cursor: pointer;
+	z-index: 5;
+	transform: translate(-50%, -50%);
+}
+
+.cp-table-delete:hover {
+	background: var(--background-modifier-error-hover, var(--background-modifier-hover));
+}
+
+.cp-table-delete svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* grip lines, oriented along the drag axis */
+
+.cp-table-handle::before,
+.cp-table-handle::after {
+	content: "";
+	position: absolute;
+	background: var(--text-on-accent);
+	border-radius: 1px;
+	opacity: 0;
+	transition: opacity 100ms ease;
+}
+
+.cp-table-handle-col::before,
+.cp-table-handle-col::after {
+	width: 2px;
+	height: 8px;
+	top: 4px;
+}
+
+.cp-table-handle-col::before {
+	left: 5px;
+}
+
+.cp-table-handle-col::after {
+	right: 5px;
+}
+
+.cp-table-handle-row::before,
+.cp-table-handle-row::after {
+	height: 2px;
+	width: 8px;
+	left: 4px;
+}
+
+.cp-table-handle-row::before {
+	top: 5px;
+}
+
+.cp-table-handle-row::after {
+	bottom: 5px;
+}
+
+.cp-table-handle:hover::before,
+.cp-table-handle:hover::after,
+.cp-table-handle.is-dragging::before,
+.cp-table-handle.is-dragging::after {
+	opacity: 1;
+}
+
+/* cell-resize dividers: invisible hit strips over the grid lines */
+
+.cp-table-divider {
+	position: absolute;
+	z-index: 2;
+	background: transparent;
+	transition: background 100ms ease;
+}
+
+.cp-table-divider-col {
+	width: 7px;
+	cursor: col-resize;
+}
+
+.cp-table-divider-row {
+	height: 7px;
+	cursor: row-resize;
+}
+
+.cp-table-divider:hover,
+.cp-table-divider.is-resizing {
+	background: hsla(var(--interactive-accent-hsl), 0.45);
+}
+
+/* reorder drag: original greys out, a ghost copy follows the pointer */
+
+.cp-table tr.cp-drag-src td,
+.cp-table td.cp-drag-src {
+	background: var(--background-modifier-hover);
+	color: transparent;
+}
+
+.cp-table-ghost {
+	position: absolute;
+	z-index: 6;
+	pointer-events: none;
+	opacity: 0.95;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+	border-radius: var(--radius-s);
+	overflow: hidden;
+	background: var(--background-primary);
+}
+
+.cp-table-ghost .cp-table {
+	width: 100%;
+}
+
+/* insert dots on internal borderlines: circle that grows into a ⊕ on hover */
+
+.cp-insert {
+	position: absolute;
+	z-index: 4;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: hsla(var(--interactive-accent-hsl), 0.55);
+	color: var(--text-on-accent);
+	cursor: pointer;
+	opacity: 0;
+	transform: translate(-50%, -50%);
+	transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
+}
+
+.cp-insert svg {
+	width: 5px;
+	height: 5px;
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.cp-insert.is-visible {
+	opacity: 1;
+}
+
+.cp-insert:hover {
+	transform: translate(-50%, -50%) scale(2.4);
+	background: var(--interactive-accent);
+}
+
+.cp-insert:hover svg {
+	opacity: 1;
+}
+
+/* highlighted borderline showing where the insert will land */
+
+.cp-insert-line {
+	position: absolute;
+	z-index: 3;
+	background: var(--interactive-accent);
+	border-radius: 2px;
+	pointer-events: none;
+}
+
+/* while a cell is being edited, only the cell shows selection — not the node */
+
+.canvas-node.canvas-pencil-table.cp-cell-editing .canvas-node-container {
+	outline: none;
+}
+
+.cp-table-handle.is-visible,
+.cp-table-handle.is-dragging {
+	opacity: 1;
+}
