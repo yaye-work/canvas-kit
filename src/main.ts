@@ -390,6 +390,19 @@ export default class CanvasPencilPlugin extends Plugin {
 
 const svgIcon = (inner: string) =>
 	`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class="svg-icon">${inner}</svg>`;
+
+/**
+ * Mount a self-authored SVG string into an element as parsed DOM nodes.
+ * Parsed as image/svg+xml, so any markup is data — scripts never execute — and
+ * the element keeps the correct SVG namespace. Returns false on a parse error.
+ */
+function setSvg(el: HTMLElement, svg: string): boolean {
+	const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+	if (!root || root.tagName.toLowerCase() !== "svg") return false;
+	el.empty();
+	el.appendChild(el.ownerDocument.importNode(root, true));
+	return true;
+}
 const filled = (d: string, evenOdd = true) =>
 	svgIcon(
 		`<path ${evenOdd ? 'fill-rule="evenodd" clip-rule="evenodd" ' : ""}d="${d}" fill="currentColor"/>`
@@ -512,7 +525,7 @@ class CanvasToolbar {
 				cls: "canvas-pencil-tool",
 				attr: { "aria-label": t.label },
 			});
-			if (t.svg) btn.innerHTML = t.svg;
+			if (t.svg) setSvg(btn, t.svg);
 			else setIcon(btn, t.icon);
 			btn.addEventListener("click", () => this.setTool(t.id));
 			this.buttons.set(t.id, btn);
@@ -639,7 +652,7 @@ class CanvasToolbar {
 		const btn = this.buttons.get("marker");
 		if (!btn) return;
 		const mode = MARKER_MODES.find((m) => m.id === this.markerMode);
-		if (mode?.svg) btn.innerHTML = mode.svg;
+		if (mode?.svg) setSvg(btn, mode.svg);
 		else setIcon(btn, mode?.icon ?? "pencil");
 	}
 
@@ -715,7 +728,7 @@ class CanvasToolbar {
 				cls: "canvas-pencil-mode canvas-pencil-mode-btn",
 				attr: { "aria-label": m.label },
 			});
-			if (m.svg) btn.innerHTML = m.svg;
+			if (m.svg) setSvg(btn, m.svg);
 			else setIcon(btn, m.icon);
 			if (m.id === this.markerMode) btn.addClass("is-active");
 			btn.addEventListener("click", () => this.setMarkerMode(m.id));
@@ -758,7 +771,7 @@ class CanvasToolbar {
 				cls: "canvas-pencil-mode canvas-pencil-mode-btn",
 				attr: { "aria-label": m.label },
 			});
-			if (m.svg) btn.innerHTML = m.svg;
+			if (m.svg) setSvg(btn, m.svg);
 			else setIcon(btn, m.icon);
 			if (m.id === this.cardMode) btn.addClass("is-active");
 			btn.addEventListener("click", () => this.setCardMode(m.id));
@@ -2053,7 +2066,7 @@ class MarkerOverlay extends ToolOverlay {
 		this.tapePreviewEl.style.top = `${(ink.box.y - origin.y) * scale}px`;
 		this.tapePreviewEl.style.width = `${ink.box.width * scale}px`;
 		this.tapePreviewEl.style.height = `${ink.box.height * scale}px`;
-		this.tapePreviewEl.innerHTML = ink.svg;
+		setSvg(this.tapePreviewEl, ink.svg);
 		this.tapePreviewEl.show();
 	}
 
@@ -3282,7 +3295,7 @@ function enforceInkVisual(el: HTMLElement, text: string) {
 	const direct = content.firstElementChild;
 	const isBareSvg =
 		content.children.length === 1 && direct?.tagName.toLowerCase() === "svg";
-	if (!isBareSvg) content.innerHTML = text;
+	if (!isBareSvg) setSvg(content, text);
 	content.style.setProperty("padding", "0", "important");
 	content.style.setProperty("background", "transparent", "important");
 	content.style.setProperty("overflow", "visible", "important");
