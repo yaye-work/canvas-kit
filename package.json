@@ -28,7 +28,6 @@
   "homepage": "https://github.com/yaye-work/canvas-kit",
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "builtin-modules": "^3.3.0",
     "esbuild": "^0.21.0",
     "obsidian": "latest",
     "tslib": "^2.6.0",
