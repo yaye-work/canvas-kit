@@ -1,27 +1,33 @@
 # Canvas Kit
+Add marker, highlighter, tape, text tool, quick drag-out card, make new notes or embed straight in the canvas FAST. Interactive table.
+Your canvas power house with annonations.
 
-A FigJam-style annotation toolbar for Obsidian Canvas. A persistent toolbar at the top of every canvas gives you drawing tools, borderless text, cards (blank or note-backed), sections, tables, and images — without leaving the canvas.
-
-Ink is stored as inline SVG inside ordinary canvas text nodes — **no separate files, no drawings folder**. Everything lives in the `.canvas` file itself.
+Ink is stored as inline SVG inside ordinary canvas text nodes — **no separate files, no drawings folder**. Everything lives in the canvas file itself.
 
 ## Tools
+
+- **Draw Kit** (`M`) — Smooth freehand Marker, Highlighter, Washi Tape with different designs (you can also upload any image and it will become a tape).
 <img width="749" height="517" alt="Draw Kit" src="https://github.com/user-attachments/assets/ac19f481-9e50-4142-8488-867a68072064" />
-- **Draw Kit** (`M`) — freehand drawing, smoothed with [perfect-freehand](https://github.com/steveruizok/perfect-freehand). The toolbar button shows your last-used draw tool. Sub-toolbar:
-  - *Marker / Highlighter* — highlighter is fatter, flat-tipped, and translucent.
-  - *Tape* — drag a strip of washi-style grid tape across the canvas.
-  - *Eraser* — click or drag over ink to remove a whole stroke.
-  - *Size* — one button, click for a thickness slider (disabled for tape/eraser).
-  - *Colors* — FigJam-style presets plus a color wheel for custom colors.
-  - Ink auto-commits a few seconds after you stop drawing and renders frameless, like ink sitting on the canvas. Committed ink is a normal node: select, move, delete.
-- **Text** (`T`) — click anywhere and start typing, Photoshop-style: no box, no card, no background, just text that grows as you type. Supports markdown, including per-line headings and lists. Resize a text node to scale it uniformly, recolor it with the node's color button, and re-open it for editing via the Edit button, a double-click, or the Text tool.
-- **Card** (`C`) — drag to size a card. A sub-toolbar picks what the card is:
+
+- **Just Text Please** (`T`) — click anywhere and start typing, no outline or nested in a card. Supports markdown. Resize a text to scale it uniformly, recolor it with the node's color button, and re-open it for editing via the Edit button.
+<img width="1135" height="783" alt="TEXT" src="https://github.com/user-attachments/assets/97ab5f95-1dae-4f19-af4c-8ec95459e474" />
+
+- **Better Cards** (`C`) — Create and resize your card in a single drag. Quick add existing note and new note. 
+<img width="749" height="517" alt="card" src="https://github.com/user-attachments/assets/74d1e109-7471-40ce-a876-8e9bb2f18558" />
+A sub-toolbar picks what the card is:
   - *Empty* — a blank card.
   - *New note* — creates a note in your vault and embeds it in one gesture.
   - *Existing note* — pick a note from an inline search and drop it in.
-  - A blank card also shows **+ / embed** buttons on its edge while selected, so you can turn it into a new or existing note in place.
-- **Section** (`G`) — drag a marquee to create a native canvas group; the label drops straight into rename mode.
+  - A blank card also shows **new note / embed** buttons on its edge while selected, so you can turn it into a new or existing note in place.
+  
+- **Drag and Make Section** (`G`) — Similar to Figma's frame tool: drag a marquee to create a section; then you can rename the section straight away.
+<img width="749" height="517" alt="Drag Section" src="https://github.com/user-attachments/assets/77cd12ae-9c91-4683-be2c-3812902f3fda" />
+
 - **Table** (`B`) — drag to set rows × columns; a borderless, interactive table you can edit in place. Drag the row/column handles to reorder, **click** a handle to select a row/column (then delete it with the trash button or `Delete`), and drag the dividers to resize.
+<img width="749" height="517" alt="image" src="https://github.com/user-attachments/assets/55512b41-f7af-442a-a444-652b5cdc3295" />
+
 - **Image** (`I`) — a previewable image picker: search your vault's images as thumbnails, or **upload** one from your computer, then drag to place it.
+<img width="749" height="517" alt="Table" src="https://github.com/user-attachments/assets/cc7b22b5-cdfd-4072-afbc-794f990db8b0" />
 
 ## Tips
 
