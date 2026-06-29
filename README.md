@@ -5,9 +5,8 @@ A FigJam-style annotation toolbar for Obsidian Canvas. A persistent toolbar at t
 Ink is stored as inline SVG inside ordinary canvas text nodes — **no separate files, no drawings folder**. Everything lives in the `.canvas` file itself.
 
 ## Tools
-
-- **Select** (`V` / `Esc`) — normal canvas interaction; the default.
-- **Draw** (`M`) — freehand drawing, smoothed with [perfect-freehand](https://github.com/steveruizok/perfect-freehand). The toolbar button shows your last-used draw tool. Sub-toolbar:
+<img width="749" height="517" alt="Draw Kit" src="https://github.com/user-attachments/assets/ac19f481-9e50-4142-8488-867a68072064" />
+- **Draw Kit** (`M`) — freehand drawing, smoothed with [perfect-freehand](https://github.com/steveruizok/perfect-freehand). The toolbar button shows your last-used draw tool. Sub-toolbar:
   - *Marker / Highlighter* — highlighter is fatter, flat-tipped, and translucent.
   - *Tape* — drag a strip of washi-style grid tape across the canvas.
   - *Eraser* — click or drag over ink to remove a whole stroke.
