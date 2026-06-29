@@ -1,3 +1,4 @@
+<img width="1678" height="978" alt="8058" src="https://github.com/user-attachments/assets/24296da5-f944-41d7-a326-3bf8279bdd81" />
 # Canvas Kit
 Add marker, highlighter, tape, text tool, quick drag-out card, make new notes or embed straight in the canvas FAST. Interactive table.
 Your canvas power house with annonations.
@@ -6,11 +7,11 @@ Ink is stored as inline SVG inside ordinary canvas text nodes — **no separate 
 
 ## Tools
 
-- **Draw Kit** (`M`) — Smooth freehand Marker, Highlighter, Washi Tape with different designs (you can also upload any image and it will become a tape).
+- **Draw Kit** (`M`) — Smooth freehand Marker,Highlighter, Washi Tape with different designs (you can also upload any image and it will become a tape).
 <img width="749" height="517" alt="Draw Kit" src="https://github.com/user-attachments/assets/ac19f481-9e50-4142-8488-867a68072064" />
 
 - **Just Text Please** (`T`) — click anywhere and start typing, no outline or nested in a card. Supports markdown. Resize a text to scale it uniformly, recolor it with the node's color button, and re-open it for editing via the Edit button.
-<img width="1135" height="783" alt="TEXT" src="https://github.com/user-attachments/assets/97ab5f95-1dae-4f19-af4c-8ec95459e474" />
+<img width="749" height="517" alt="TEXT" src="https://github.com/user-attachments/assets/97ab5f95-1dae-4f19-af4c-8ec95459e474" />
 
 - **Better Cards** (`C`) — Create and resize your card in a single drag. Quick add existing note and new note. 
 <img width="749" height="517" alt="card" src="https://github.com/user-attachments/assets/74d1e109-7471-40ce-a876-8e9bb2f18558" />
