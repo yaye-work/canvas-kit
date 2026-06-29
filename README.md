@@ -18,20 +18,21 @@ Ink is stored as inline SVG inside ordinary canvas text nodes — **no separate 
 - **Better Cards** (`C`) — Create and resize your card in a single drag. Quick add existing note and new note. 
 <img width="749" height="517" alt="card" src="https://github.com/user-attachments/assets/74d1e109-7471-40ce-a876-8e9bb2f18558" />
 
-A sub-toolbar picks what the card is:
-  - *Empty* — a blank card.
-  - *New note* — creates a note in your vault and embeds it in one gesture.
-  - *Existing note* — pick a note from an inline search and drop it in.
-  - A blank card also shows **new note / embed** buttons on its edge while selected, so you can turn it into a new or existing note in place.
+  A sub-toolbar picks what the card is:
+    - *Empty* — a blank card.
+    - *New note* — creates a note in your vault and embeds it in one gesture.
+    - *Existing note* — pick a note from an inline search and drop it in.
+    - A blank card also shows **new note / embed** buttons on its edge while selected, so you can turn it into a new or existing note in place.
   
 - **Drag and Make Section** (`G`) — Similar to Figma's frame tool: drag a marquee to create a section; then you can rename the section straight away.
+
 <img width="749" height="517" alt="Drag Section" src="https://github.com/user-attachments/assets/77cd12ae-9c91-4683-be2c-3812902f3fda" />
 
 - **Table** (`B`) — drag to set rows × columns; a borderless, interactive table you can edit in place. Drag the row/column handles to reorder, **click** a handle to select a row/column (then delete it with the trash button or `Delete`), and drag the dividers to resize.
-<img width="749" height="517" alt="image" src="https://github.com/user-attachments/assets/55512b41-f7af-442a-a444-652b5cdc3295" />
+<img width="749" height="517" alt="Table" src="https://github.com/user-attachments/assets/cc7b22b5-cdfd-4072-afbc-794f990db8b0" />
 
 - **Image** (`I`) — a previewable image picker: search your vault's images as thumbnails, or **upload** one from your computer, then drag to place it.
-<img width="749" height="517" alt="Table" src="https://github.com/user-attachments/assets/cc7b22b5-cdfd-4072-afbc-794f990db8b0" />
+<img width="749" height="517" alt="image" src="https://github.com/user-attachments/assets/55512b41-f7af-442a-a444-652b5cdc3295" />
 
 ## Tips
 
