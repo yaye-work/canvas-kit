@@ -1,7 +1,7 @@
 
 
 # Canvas Kit
-<img width="1678" height="978" alt="8058" src="https://github.com/user-attachments/assets/24296da5-f944-41d7-a326-3bf8279bdd81" />
+<img alt="canvaskit" src="https://github.com/user-attachments/assets/24296da5-f944-41d7-a326-3bf8279bdd81" />
 Add marker, highlighter, tape, text tool, quick drag-out card, make new notes or embed straight in the canvas FAST. Interactive table.
 Your canvas power house with annonations.
 
