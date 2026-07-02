@@ -281,20 +281,6 @@ interface CanvasLike {
 	removeNode?: (node: CanvasNodeLike) => void;
 	requestSave?: () => void;
 	deselectAll?: () => void;
-	getData?: () => unknown;
-	pushHistory?: (data: unknown) => void;
-}
-
-/** Record the post-change canvas state in Obsidian's own undo history, so the
- *  built-in undo/redo buttons revert Canvas Kit strokes/nodes too. */
-function pushCanvasHistory(canvas: CanvasLike | undefined) {
-	if (!canvas) return;
-	try {
-		const data = canvas.getData?.();
-		if (data) canvas.pushHistory?.(data);
-	} catch (err) {
-		console.warn("Canvas Kit: couldn't push undo history", err);
-	}
 }
 
 interface CanvasViewLike extends ItemView {
@@ -565,10 +551,23 @@ class CanvasToolbar {
 		// only show up in the 1.2s sweep. Watch the node class attributes and
 		// refresh in the SAME microtask — before the browser paints — so the
 		// empty-card buttons appear instantly AND the table's menu-hiding class is
-		// in place before Obsidian's popup can flash on screen.
+		// in place before Obsidian's popup can flash on screen. Node ADDITIONS are
+		// watched too: undo/redo rebuilds every node element, and without an
+		// immediate sweep the fresh ink nodes flash their raw boxed-SVG rendering
+		// until the interval sweep catches them.
 		const wrap = this.view.canvas!.wrapperEl;
 		this.selectionObserver = new MutationObserver((records) => {
 			for (const r of records) {
+				if (r.type === "childList") {
+					for (const added of Array.from(r.addedNodes)) {
+						const el = added as HTMLElement;
+						if (el.classList?.contains("canvas-node")) {
+							this.scheduleRefresh();
+							return;
+						}
+					}
+					continue;
+				}
 				const t = r.target as HTMLElement;
 				if (!t.classList?.contains("canvas-node")) continue;
 				const had = /is-selected|is-focused/.test(r.oldValue || "");
@@ -584,6 +583,7 @@ class CanvasToolbar {
 			attributes: true,
 			attributeFilter: ["class"],
 			attributeOldValue: true,
+			childList: true,
 			subtree: true,
 		});
 
@@ -834,7 +834,6 @@ class CanvasToolbar {
 		try {
 			canvas.createFileNode({ pos, size, file, save: true, focus: true });
 			canvas.requestSave?.();
-			pushCanvasHistory(canvas);
 		} catch (err) {
 			console.error("Canvas Kit: couldn't embed new note", err);
 			new Notice("Canvas Kit: couldn't embed the new note.");
@@ -876,7 +875,6 @@ class CanvasToolbar {
 			canvas.removeNode?.(node);
 			canvas.createFileNode({ pos, size, file, save: true, focus: true });
 			canvas.requestSave?.();
-			pushCanvasHistory(canvas);
 		} catch (err) {
 			console.error("Canvas Kit: couldn't embed note", err);
 			new Notice("Canvas Kit: couldn't embed the note.");
@@ -1002,7 +1000,6 @@ class CanvasToolbar {
 		try {
 			canvas.createFileNode({ pos, size, file, save: true, focus: true });
 			canvas.requestSave?.();
-			pushCanvasHistory(canvas);
 		} catch (err) {
 			console.error("Canvas Kit: couldn't embed note", err);
 			new Notice("Canvas Kit: couldn't embed the note.");
@@ -1158,7 +1155,6 @@ class CanvasToolbar {
 		try {
 			canvas.createFileNode({ pos, size, file, save: true, focus: true });
 			canvas.requestSave?.();
-			pushCanvasHistory(canvas);
 		} catch (err) {
 			console.error("Canvas Kit: couldn't embed image", err);
 			new Notice("Canvas Kit: couldn't embed the image.");
@@ -1458,7 +1454,6 @@ class CanvasToolbar {
 						canvas.deselectAll?.();
 					}
 					canvas.requestSave?.();
-					pushCanvasHistory(canvas);
 				} catch (err) {
 					console.error("Canvas Kit: text commit failed", err);
 					new Notice("Canvas Kit: couldn't save text.");
@@ -1959,7 +1954,6 @@ class MarkerOverlay extends ToolOverlay {
 	private current: PencilStroke | null = null;
 	private tapeStart: { x: number; y: number } | null = null;
 	private tapeEnd: { x: number; y: number } | null = null;
-	private erased = false;
 	private tapePreviewEl: HTMLElement;
 	private resizeObserver: ResizeObserver;
 
@@ -2077,11 +2071,6 @@ class MarkerOverlay extends ToolOverlay {
 				if (stroke.worldPts.length > 1) this.commitStroke(stroke);
 				this.redraw();
 			}
-			if (this.erased) {
-				// One undo step per erase drag, not per node removed.
-				this.erased = false;
-				pushCanvasHistory(this.canvas);
-			}
 			e.preventDefault();
 		};
 		el.addEventListener("pointerup", end);
@@ -2126,7 +2115,6 @@ class MarkerOverlay extends ToolOverlay {
 			) {
 				canvas.removeNode?.(node);
 				canvas.requestSave?.();
-				this.erased = true;
 			}
 		}
 	}
@@ -2459,7 +2447,6 @@ class DragCreateOverlay extends ToolOverlay {
 					focus: true,
 				});
 				canvas.requestSave?.();
-				pushCanvasHistory(canvas);
 				// Drop straight into renaming the section label.
 				if (node) this.beginLabelRename(node);
 			} catch (err) {
@@ -2507,7 +2494,6 @@ class DragCreateOverlay extends ToolOverlay {
 			});
 			node?.startEditing?.();
 			canvas.requestSave?.();
-			pushCanvasHistory(canvas);
 			// Mount the [+]/embed affordance on the fresh empty card right away.
 			this.tb.refreshNodeStyles();
 			window.requestAnimationFrame(() => this.tb.refreshNodeStyles());
@@ -2562,7 +2548,6 @@ class DragCreateOverlay extends ToolOverlay {
 		if (node) {
 			tagNode(node, "table");
 			canvas.requestSave?.();
-			pushCanvasHistory(canvas);
 			// Mount the interactive table right away and again after Obsidian's
 			// own render settles, so the markdown preview never shows.
 			const tb = this.tb;
@@ -3431,7 +3416,6 @@ class TableWidget {
 			setNodeText(this.node, md);
 		}
 		this.tb.view.canvas?.requestSave?.();
-		pushCanvasHistory(this.tb.view.canvas);
 		// Obsidian may re-render the node content after the text change; rebuild
 		// our widget over it now and once more after its render settles.
 		this.render();
@@ -3700,7 +3684,6 @@ function commitInkNode(tb: CanvasToolbar, ink: InkSvg | null) {
 	});
 	canvas.deselectAll?.();
 	canvas.requestSave?.();
-	pushCanvasHistory(canvas);
 	tb.refreshNodeStyles();
 }
 
