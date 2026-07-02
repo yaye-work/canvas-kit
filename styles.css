@@ -373,7 +373,10 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 .canvas-pencil-overlay {
 	position: absolute;
 	inset: 0;
-	z-index: 100;
+	/* Above the .canvas element (z auto) but BELOW Obsidian's canvas controls
+	   (z-index 5, --layer-cover), so undo/redo & zoom stay visible + clickable
+	   while a tool is active. */
+	z-index: 4;
 	touch-action: none;
 	outline: none;
 }
@@ -1011,8 +1014,8 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 .cp-table-handle.is-dragging {
 	opacity: 1;
 }
-/* Obsidian's own canvas controls (undo/redo, zoom) must stay clickable while a
-   Canvas Kit tool overlay (z-index 100) covers the canvas. */
-.canvas-wrapper .canvas-controls {
-	z-index: 120;
+/* Belt-and-suspenders: keep Obsidian's canvas controls (undo/redo, zoom) above
+   any Canvas Kit surface even if a theme re-layers them. */
+body .canvas-wrapper .canvas-controls {
+	z-index: 120 !important;
 }
