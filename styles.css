@@ -1011,3 +1011,8 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 .cp-table-handle.is-dragging {
 	opacity: 1;
 }
+/* Obsidian's own canvas controls (undo/redo, zoom) must stay clickable while a
+   Canvas Kit tool overlay (z-index 100) covers the canvas. */
+.canvas-wrapper .canvas-controls {
+	z-index: 120;
+}

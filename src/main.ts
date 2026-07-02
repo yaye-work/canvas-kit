@@ -281,6 +281,20 @@ interface CanvasLike {
 	removeNode?: (node: CanvasNodeLike) => void;
 	requestSave?: () => void;
 	deselectAll?: () => void;
+	getData?: () => unknown;
+	pushHistory?: (data: unknown) => void;
+}
+
+/** Record the post-change canvas state in Obsidian's own undo history, so the
+ *  built-in undo/redo buttons revert Canvas Kit strokes/nodes too. */
+function pushCanvasHistory(canvas: CanvasLike | undefined) {
+	if (!canvas) return;
+	try {
+		const data = canvas.getData?.();
+		if (data) canvas.pushHistory?.(data);
+	} catch (err) {
+		console.warn("Canvas Kit: couldn't push undo history", err);
+	}
 }
 
 interface CanvasViewLike extends ItemView {
@@ -703,6 +717,28 @@ class CanvasToolbar {
 		this.setTool("select");
 	}
 
+	/**
+	 * iPad: the on-screen keyboard scrolls the app (window and/or workspace
+	 * ancestors) to keep the caret visible and doesn't always scroll it back,
+	 * leaving the toolbar off-screen. Re-pin everything once editing ends —
+	 * repeated on a timer to outlast the keyboard's hide animation.
+	 */
+	restoreViewportPosition() {
+		const pin = () => {
+			const win = this.doc.defaultView;
+			win?.scrollTo(0, 0);
+			let el: HTMLElement | null = this.view.canvas?.wrapperEl ?? null;
+			while (el) {
+				if (el.scrollTop) el.scrollTop = 0;
+				if (el.scrollLeft) el.scrollLeft = 0;
+				el = el.parentElement;
+			}
+		};
+		pin();
+		window.setTimeout(pin, 300);
+		window.setTimeout(pin, 700);
+	}
+
 	// --- marker sub toolbar: [modes] | [size] | [colors or tape patterns] ---
 
 	private showMarkerSubBar() {
@@ -798,6 +834,7 @@ class CanvasToolbar {
 		try {
 			canvas.createFileNode({ pos, size, file, save: true, focus: true });
 			canvas.requestSave?.();
+			pushCanvasHistory(canvas);
 		} catch (err) {
 			console.error("Canvas Kit: couldn't embed new note", err);
 			new Notice("Canvas Kit: couldn't embed the new note.");
@@ -839,6 +876,7 @@ class CanvasToolbar {
 			canvas.removeNode?.(node);
 			canvas.createFileNode({ pos, size, file, save: true, focus: true });
 			canvas.requestSave?.();
+			pushCanvasHistory(canvas);
 		} catch (err) {
 			console.error("Canvas Kit: couldn't embed note", err);
 			new Notice("Canvas Kit: couldn't embed the note.");
@@ -964,6 +1002,7 @@ class CanvasToolbar {
 		try {
 			canvas.createFileNode({ pos, size, file, save: true, focus: true });
 			canvas.requestSave?.();
+			pushCanvasHistory(canvas);
 		} catch (err) {
 			console.error("Canvas Kit: couldn't embed note", err);
 			new Notice("Canvas Kit: couldn't embed the note.");
@@ -1119,6 +1158,7 @@ class CanvasToolbar {
 		try {
 			canvas.createFileNode({ pos, size, file, save: true, focus: true });
 			canvas.requestSave?.();
+			pushCanvasHistory(canvas);
 		} catch (err) {
 			console.error("Canvas Kit: couldn't embed image", err);
 			new Notice("Canvas Kit: couldn't embed the image.");
@@ -1418,6 +1458,7 @@ class CanvasToolbar {
 						canvas.deselectAll?.();
 					}
 					canvas.requestSave?.();
+					pushCanvasHistory(canvas);
 				} catch (err) {
 					console.error("Canvas Kit: text commit failed", err);
 					new Notice("Canvas Kit: couldn't save text.");
@@ -1432,6 +1473,7 @@ class CanvasToolbar {
 				window.requestAnimationFrame(settle);
 				window.setTimeout(settle, 80);
 				window.setTimeout(settle, 250);
+				this.restoreViewportPosition();
 				onClose?.();
 			},
 		};
@@ -1777,6 +1819,8 @@ class CanvasToolbar {
 abstract class ToolOverlay {
 	protected el: HTMLElement;
 	protected destroyed = false;
+	private touchPts = new Map<number, { x: number; y: number }>();
+	private gestureActive = false;
 
 	constructor(protected tb: CanvasToolbar, cls: string) {
 		this.el = tb.view.canvas!.wrapperEl.createDiv({ cls: `canvas-pencil-overlay ${cls}` });
@@ -1787,6 +1831,92 @@ abstract class ToolOverlay {
 			e.stopPropagation();
 			this.onContextMenu();
 		});
+		this.bindPanGestures();
+	}
+
+	/** True while a two-finger pan/zoom gesture owns the pointer. */
+	protected gesturing(): boolean {
+		return this.gestureActive;
+	}
+
+	/** A two-finger gesture just began — cancel any in-progress tool work. */
+	protected onGestureStart() {}
+
+	/**
+	 * Freeform-canvas feel: with any tool active, a second finger turns the
+	 * gesture into pan/pinch-zoom instead of more tool input. Tracked in the
+	 * capture phase so the subclass tool handlers never see gesture moves.
+	 */
+	private bindPanGestures() {
+		const down = (e: PointerEvent) => {
+			if (e.pointerType !== "touch") return;
+			this.touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+			if (this.touchPts.size === 2 && !this.gestureActive) {
+				this.gestureActive = true;
+				this.onGestureStart();
+			}
+		};
+		const move = (e: PointerEvent) => {
+			if (e.pointerType !== "touch") return;
+			const prev = this.touchPts.get(e.pointerId);
+			if (!prev) return;
+			if (!this.gestureActive || this.touchPts.size !== 2) {
+				this.touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+				return;
+			}
+			const other = [...this.touchPts.entries()].find(([id]) => id !== e.pointerId)?.[1];
+			this.touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+			if (!other) return;
+			const pcx = (prev.x + other.x) / 2;
+			const pcy = (prev.y + other.y) / 2;
+			const pd = Math.hypot(prev.x - other.x, prev.y - other.y);
+			const cx = (e.clientX + other.x) / 2;
+			const cy = (e.clientY + other.y) / 2;
+			const d = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+			this.applyPanZoom(cx - pcx, cy - pcy, pd > 0 ? d / pd : 1, cx, cy);
+			e.preventDefault();
+			e.stopPropagation();
+		};
+		const up = (e: PointerEvent) => {
+			if (e.pointerType !== "touch") return;
+			this.touchPts.delete(e.pointerId);
+			if (this.touchPts.size < 2) this.gestureActive = false;
+		};
+		this.el.addEventListener("pointerdown", down, true);
+		this.el.addEventListener("pointermove", move, true);
+		this.el.addEventListener("pointerup", up, true);
+		this.el.addEventListener("pointercancel", up, true);
+	}
+
+	/** Drive Obsidian's own wheel handlers: plain wheel pans, ctrl+wheel zooms —
+	 *  no reliance on undocumented viewport internals. */
+	private applyPanZoom(dx: number, dy: number, ratio: number, cx: number, cy: number) {
+		const wrap = this.canvas.wrapperEl;
+		const target = wrap.querySelector(".canvas") ?? wrap;
+		if (dx || dy) {
+			target.dispatchEvent(
+				new WheelEvent("wheel", {
+					deltaX: -dx,
+					deltaY: -dy,
+					clientX: cx,
+					clientY: cy,
+					bubbles: true,
+					cancelable: true,
+				})
+			);
+		}
+		if (ratio !== 1) {
+			target.dispatchEvent(
+				new WheelEvent("wheel", {
+					ctrlKey: true,
+					deltaY: (1 - ratio) * 100,
+					clientX: cx,
+					clientY: cy,
+					bubbles: true,
+					cancelable: true,
+				})
+			);
+		}
 	}
 
 	/** Right-click behaviour; overrides may finalize work before reverting. */
@@ -1829,6 +1959,7 @@ class MarkerOverlay extends ToolOverlay {
 	private current: PencilStroke | null = null;
 	private tapeStart: { x: number; y: number } | null = null;
 	private tapeEnd: { x: number; y: number } | null = null;
+	private erased = false;
 	private tapePreviewEl: HTMLElement;
 	private resizeObserver: ResizeObserver;
 
@@ -1847,6 +1978,15 @@ class MarkerOverlay extends ToolOverlay {
 
 	onModeChange() {
 		this.el.toggleClass("is-erasing", this.tb.markerMode === "erase");
+	}
+
+	/** Second finger landed — this is a pan/zoom, not a stroke. Drop the stroke. */
+	protected onGestureStart() {
+		this.current = null;
+		this.tapeStart = this.tapeEnd = null;
+		this.tapePreviewEl.hide();
+		this.tapePreviewEl.empty();
+		this.redraw();
 	}
 
 	private getScale(): number {
@@ -1872,7 +2012,7 @@ class MarkerOverlay extends ToolOverlay {
 		const el = this.canvasEl;
 		el.addEventListener("pointerdown", (e) => {
 			if (e.button !== 0) return;
-			if (e.pointerType === "touch" && !e.isPrimary) {
+			if (this.gesturing() || (e.pointerType === "touch" && !e.isPrimary)) {
 				this.current = null;
 				return;
 			}
@@ -1898,6 +2038,7 @@ class MarkerOverlay extends ToolOverlay {
 			e.preventDefault();
 		});
 		el.addEventListener("pointermove", (e) => {
+			if (this.gesturing()) return;
 			const mode = this.tb.markerMode;
 			if (mode === "erase") {
 				if (e.buttons & 1) this.eraseAt(this.worldFromClient(e.clientX, e.clientY));
@@ -1935,6 +2076,11 @@ class MarkerOverlay extends ToolOverlay {
 				this.current = null;
 				if (stroke.worldPts.length > 1) this.commitStroke(stroke);
 				this.redraw();
+			}
+			if (this.erased) {
+				// One undo step per erase drag, not per node removed.
+				this.erased = false;
+				pushCanvasHistory(this.canvas);
 			}
 			e.preventDefault();
 		};
@@ -1980,6 +2126,7 @@ class MarkerOverlay extends ToolOverlay {
 			) {
 				canvas.removeNode?.(node);
 				canvas.requestSave?.();
+				this.erased = true;
 			}
 		}
 	}
@@ -2092,6 +2239,7 @@ class MarkerOverlay extends ToolOverlay {
 
 class TextEditOverlay extends ToolOverlay {
 	private hint: HTMLElement;
+	private pendingDown: { x: number; y: number } | null = null;
 	constructor(tb: CanvasToolbar) {
 		super(tb, "canvas-pencil-overlay-place");
 		const hint = (this.hint = this.el.createDiv({
@@ -2100,6 +2248,7 @@ class TextEditOverlay extends ToolOverlay {
 		}));
 		hint.hide();
 		this.el.addEventListener("pointermove", (e) => {
+			if (this.gesturing()) return;
 			const r = this.el.getBoundingClientRect();
 			hint.style.left = `${e.clientX - r.left + 14}px`;
 			hint.style.top = `${e.clientY - r.top + 14}px`;
@@ -2107,11 +2256,23 @@ class TextEditOverlay extends ToolOverlay {
 		});
 		this.el.addEventListener("pointerleave", () => hint.hide());
 
+		// Place on pointer-UP with a movement threshold, so a two-finger pan (or a
+		// drag) never spawns an editor at the touch-down point.
 		this.el.addEventListener("pointerdown", (e) => {
 			if (e.button !== 0) return;
+			if (this.gesturing() || (e.pointerType === "touch" && !e.isPrimary)) return;
+			this.pendingDown = { x: e.clientX, y: e.clientY };
 			e.preventDefault();
 			e.stopPropagation();
-			const w = this.worldFromClient(e.clientX, e.clientY);
+		});
+		this.el.addEventListener("pointerup", (e) => {
+			const at = this.pendingDown;
+			this.pendingDown = null;
+			if (!at || this.gesturing()) return;
+			if (Math.hypot(e.clientX - at.x, e.clientY - at.y) > 8) return;
+			e.preventDefault();
+			e.stopPropagation();
+			const w = this.worldFromClient(at.x, at.y);
 			hint.hide();
 			// Let further clicks reach the canvas (pan / commit-on-click-away)
 			// while the inline editor is open.
@@ -2129,6 +2290,11 @@ class TextEditOverlay extends ToolOverlay {
 			const origin = { x: w.x - pad, y: w.y - pad };
 			this.tb.openTextEditor(origin, this.tb.textSize, null, null, "", close);
 		});
+	}
+
+	protected onGestureStart() {
+		this.pendingDown = null;
+		this.hint.hide();
 	}
 
 	hideHint() {
@@ -2174,6 +2340,7 @@ class DragCreateOverlay extends ToolOverlay {
 
 		this.el.addEventListener("pointerdown", (e) => {
 			if (e.button !== 0) return;
+			if (this.gesturing() || (e.pointerType === "touch" && !e.isPrimary)) return;
 			this.el.setPointerCapture(e.pointerId);
 			this.start = { x: e.clientX, y: e.clientY };
 			this.startWorld = this.worldFromClient(e.clientX, e.clientY);
@@ -2181,6 +2348,7 @@ class DragCreateOverlay extends ToolOverlay {
 			e.preventDefault();
 		});
 		this.el.addEventListener("pointermove", (e) => {
+			if (this.gesturing()) return;
 			const r = this.el.getBoundingClientRect();
 			if (!this.start) {
 				// Reflect a loaded note / image in the cursor hint.
@@ -2227,6 +2395,14 @@ class DragCreateOverlay extends ToolOverlay {
 			// re-opened its picker because nothing was chosen yet).
 			if (this.create(a, endWorld) !== false) this.tb.revertToSelect();
 		});
+	}
+
+	/** Second finger landed — this is a pan/zoom; abandon the marquee drag. */
+	protected onGestureStart() {
+		this.start = this.startWorld = null;
+		this.rectEl.hide();
+		this.labelEl.hide();
+		this.hintEl.hide();
 	}
 
 	hideHint() {
@@ -2283,6 +2459,7 @@ class DragCreateOverlay extends ToolOverlay {
 					focus: true,
 				});
 				canvas.requestSave?.();
+				pushCanvasHistory(canvas);
 				// Drop straight into renaming the section label.
 				if (node) this.beginLabelRename(node);
 			} catch (err) {
@@ -2330,6 +2507,7 @@ class DragCreateOverlay extends ToolOverlay {
 			});
 			node?.startEditing?.();
 			canvas.requestSave?.();
+			pushCanvasHistory(canvas);
 			// Mount the [+]/embed affordance on the fresh empty card right away.
 			this.tb.refreshNodeStyles();
 			window.requestAnimationFrame(() => this.tb.refreshNodeStyles());
@@ -2384,6 +2562,7 @@ class DragCreateOverlay extends ToolOverlay {
 		if (node) {
 			tagNode(node, "table");
 			canvas.requestSave?.();
+			pushCanvasHistory(canvas);
 			// Mount the interactive table right away and again after Obsidian's
 			// own render settles, so the markdown preview never shows.
 			const tb = this.tb;
@@ -2938,6 +3117,7 @@ class TableWidget {
 			td.contentEditable = "false";
 			td.removeClass("is-editing-cell");
 			this.nodeEl.removeClass("cp-cell-editing");
+			this.tb.restoreViewportPosition();
 			if (this.editingCell === td) this.editingCell = null;
 			const v = (td.textContent ?? "").trim();
 			if (v !== this.cells[r][c]) {
@@ -3251,6 +3431,7 @@ class TableWidget {
 			setNodeText(this.node, md);
 		}
 		this.tb.view.canvas?.requestSave?.();
+		pushCanvasHistory(this.tb.view.canvas);
 		// Obsidian may re-render the node content after the text change; rebuild
 		// our widget over it now and once more after its render settles.
 		this.render();
@@ -3519,6 +3700,7 @@ function commitInkNode(tb: CanvasToolbar, ink: InkSvg | null) {
 	});
 	canvas.deselectAll?.();
 	canvas.requestSave?.();
+	pushCanvasHistory(canvas);
 	tb.refreshNodeStyles();
 }
 
