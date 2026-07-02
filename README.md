@@ -36,7 +36,7 @@ Ink is stored as inline SVG inside ordinary canvas text nodes — **no separate 
 
 ## Handwriting to text
 
-Double-tap (or double-click) any handwriting drawn with the marker and Canvas Kit converts it to clean, editable text — like MyScript Notes. Nearby strokes are grouped automatically, so tapping one letter converts the whole word or line. The text lands at the same spot and size as the ink; undo brings the handwriting back.
+Double-tap (or double-click) any handwriting drawn with the marker and Canvas Kit converts it to clean, editable text — like MyScript Notes. Nearby strokes are grouped automatically, so tapping one letter converts the whole word or line. You can also select strokes and right-click → **Convert to text** to convert exactly that selection. The text lands at the same spot and size as the ink; undo brings the handwriting back.
 
 Recognition uses [MyScript Cloud](https://developer.myscript.com/) (the engine behind MyScript Notes/Nebo):
 

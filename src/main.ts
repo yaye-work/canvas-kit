@@ -1,6 +1,7 @@
 import {
 	App,
 	ItemView,
+	Menu,
 	Notice,
 	Plugin,
 	PluginSettingTab,
@@ -288,6 +289,13 @@ interface CanvasLike {
 	removeNode?: (node: CanvasNodeLike) => void;
 	requestSave?: () => void;
 	deselectAll?: () => void;
+	selection?: Set<CanvasNodeLike>;
+}
+
+/** True for nodes created by the marker/highlighter/tape tools. */
+function isInkNode(node: CanvasNodeLike): boolean {
+	const t = node.text;
+	return typeof t === "string" && t.startsWith("<svg") && t.includes(INK_MARK);
 }
 
 interface CanvasViewLike extends ItemView {
@@ -323,6 +331,54 @@ export default class CanvasPencilPlugin extends Plugin {
 			},
 		});
 
+		// Right-click menu: "Convert to text" on ink nodes / selections of them.
+		this.registerEvent(
+			this.app.workspace.on(
+				// Canvas menu events aren't in the public typings.
+				"canvas:node-menu" as "quick-preview",
+				((menu: Menu, node: CanvasNodeLike & { canvas?: CanvasLike }) => {
+					if (!isInkNode(node)) return;
+					const tb = this.toolbarFor(node.canvas);
+					if (!tb) return;
+					menu.addItem((item) =>
+						item
+							.setSection("canvas")
+							.setTitle("Convert to text")
+							.setIcon("type")
+							.onClick(() => void tb.convertInkToText(node))
+					);
+				}) as unknown as () => void
+			)
+		);
+		this.registerEvent(
+			this.app.workspace.on(
+				"canvas:selection-menu" as "quick-preview",
+				((menu: Menu, canvas: CanvasLike) => {
+					const tb = this.toolbarFor(canvas);
+					if (!tb || !canvas.selection) return;
+					// Keep drawing order (canvas.nodes is insertion-ordered).
+					const selected: CanvasNodeLike[] = [];
+					if (canvas.nodes) {
+						for (const n of canvas.nodes.values()) {
+							if (canvas.selection.has(n) && isInkNode(n)) selected.push(n);
+						}
+					}
+					if (!selected.length) return;
+					menu.addItem((item) =>
+						item
+							.setSection("canvas")
+							.setTitle(
+								selected.length > 1
+									? `Convert ${selected.length} strokes to text`
+									: "Convert to text"
+							)
+							.setIcon("type")
+							.onClick(() => void tb.convertInkNodes(selected))
+					);
+				}) as unknown as () => void
+			)
+		);
+
 		this.registerEvent(this.app.workspace.on("layout-change", () => this.attachToolbars()));
 		this.registerEvent(
 			this.app.workspace.on("active-leaf-change", () => this.attachToolbars())
@@ -350,6 +406,15 @@ export default class CanvasPencilPlugin extends Plugin {
 	/** Re-apply the toolbar scale to every live canvas toolbar. */
 	applyToolbarScale() {
 		for (const tb of this.toolbars.values()) tb.applyScale();
+	}
+
+	/** The toolbar attached to a given canvas instance (menus hand us the canvas). */
+	toolbarFor(canvas: CanvasLike | undefined): CanvasToolbar | null {
+		if (!canvas) return null;
+		for (const [view, tb] of this.toolbars) {
+			if (view.canvas === canvas) return tb;
+		}
+		return null;
 	}
 
 	getActiveCanvasView(): CanvasViewLike | null {
@@ -1626,10 +1691,7 @@ class CanvasToolbar {
 		const all: CanvasNodeLike[] = [];
 		if (canvas?.nodes) {
 			for (const n of canvas.nodes.values()) {
-				const t = n.text;
-				if (typeof t === "string" && t.startsWith("<svg") && t.includes(INK_MARK) && inkStrokesOf(n)) {
-					all.push(n);
-				}
+				if (isInkNode(n) && inkStrokesOf(n)) all.push(n);
 			}
 		}
 		const box = (n: CanvasNodeLike) => ({
@@ -1663,8 +1725,19 @@ class CanvasToolbar {
 		return all.filter((n) => cluster.has(n));
 	}
 
-	/** Recognize the tapped handwriting cluster and swap it for a text node. */
+	/** Double-tap entry point: recognize the tapped node PLUS its neighbors. */
 	async convertInkToText(seed: CanvasNodeLike) {
+		if (!inkStrokesOf(seed)) {
+			new Notice("Canvas Kit: no stroke data — this ink was drawn with an older version.");
+			return;
+		}
+		await this.convertInkNodes(this.collectInkCluster(seed));
+	}
+
+	/** Recognize EXACTLY these ink nodes and swap them for one text node.
+	 *  Used directly by the right-click menu on a selection — the user chose
+	 *  the set, so no proximity clustering is applied. */
+	async convertInkNodes(cluster: CanvasNodeLike[]) {
 		if (this.recognizingInk) return;
 		const canvas = this.view.canvas;
 		if (!canvas) return;
@@ -1673,14 +1746,13 @@ class CanvasToolbar {
 			new Notice("Canvas Kit: add your MyScript keys in settings to convert handwriting.");
 			return;
 		}
-		if (!inkStrokesOf(seed)) {
+		const strokes: InkStroke[] = [];
+		cluster = cluster.filter((n) => inkStrokesOf(n));
+		for (const n of cluster) strokes.push(...(inkStrokesOf(n) ?? []));
+		if (!strokes.length) {
 			new Notice("Canvas Kit: no stroke data — this ink was drawn with an older version.");
 			return;
 		}
-		const cluster = this.collectInkCluster(seed);
-		const strokes: InkStroke[] = [];
-		for (const n of cluster) strokes.push(...(inkStrokesOf(n) ?? []));
-		if (!strokes.length) return;
 
 		this.recognizingInk = true;
 		const els = cluster.map((n) => n.nodeEl).filter((e): e is HTMLElement => !!e);
