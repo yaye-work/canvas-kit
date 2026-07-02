@@ -34,6 +34,18 @@ Ink is stored as inline SVG inside ordinary canvas text nodes — **no separate 
 - **Image** (`I`) — a previewable image picker: search your vault's images as thumbnails, or **upload** one from your computer, then drag to place it.
 <img width="749" height="517" alt="image" src="https://github.com/user-attachments/assets/55512b41-f7af-442a-a444-652b5cdc3295" />
 
+## Handwriting to text
+
+Double-tap (or double-click) any handwriting drawn with the marker and Canvas Kit converts it to clean, editable text — like MyScript Notes. Nearby strokes are grouped automatically, so tapping one letter converts the whole word or line. The text lands at the same spot and size as the ink; undo brings the handwriting back.
+
+Recognition uses [MyScript Cloud](https://developer.myscript.com/) (the engine behind MyScript Notes/Nebo):
+
+1. Register a free application at [developer.myscript.com](https://developer.myscript.com/) — the free tier covers **2,000 recognitions per month**.
+2. Paste the **application key** and **HMAC key** into Canvas Kit's settings.
+3. Optionally set the recognition language (default `en_US`).
+
+Notes: recognition needs an internet connection (stroke coordinates are sent to MyScript's API), and only ink drawn with Canvas Kit 0.2.0+ carries the stroke data recognition needs — older drawings can't be converted.
+
 ## Tips
 
 - **Right-click** exits the current tool (back to Select). Right-clicking while editing text finishes the edit.
@@ -44,6 +56,7 @@ Ink is stored as inline SVG inside ordinary canvas text nodes — **no separate 
 - **Toolbar size** — scale the toolbar to taste.
 - **Hide Obsidian's bottom bar** — hide the built-in add-to-canvas bar (Canvas Kit replaces it).
 - **Default marker color / size**, **default text size**, and a slot to remove a custom tape image.
+- **Handwriting to text** — MyScript application + HMAC keys and the recognition language.
 
 ## Install
 

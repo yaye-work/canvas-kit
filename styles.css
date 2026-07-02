@@ -1019,3 +1019,19 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 body .canvas-wrapper .canvas-controls {
 	z-index: 120 !important;
 }
+
+/* ---- handwriting recognition in flight ---- */
+
+.canvas-node.canvas-pencil-recognizing {
+	animation: canvas-pencil-pulse 1s ease-in-out infinite;
+}
+
+@keyframes canvas-pencil-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
