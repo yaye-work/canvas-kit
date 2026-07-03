@@ -2851,6 +2851,16 @@ class TextEditOverlay extends ToolOverlay {
 				this.tb.editTextNode(hit.node, hit.el, close);
 				return;
 			}
+			// Size new text relative to what's on screen — a fixed canvas-unit
+			// size disappears when zoomed out. 4% of the visible viewport height
+			// reads comfortably at any zoom.
+			const r2 = this.el.getBoundingClientRect();
+			const topW = this.worldFromClient(r2.left, r2.top);
+			const botW = this.worldFromClient(r2.left, r2.bottom);
+			const viewH = Math.abs(botW.y - topW.y);
+			if (viewH > 0) {
+				this.tb.textSize = Math.round(Math.min(200, Math.max(8, viewH * 0.04)));
+			}
 			// Anchor so the first glyph lands at the click point (offset by the
 			// node's inner padding, which scales with the font size).
 			const pad = this.tb.textSize * TEXT_PAD_EM;
