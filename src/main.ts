@@ -21,6 +21,7 @@ interface CanvasPencilSettings {
 	textSize: number; // starting font size for new text (in canvas units)
 	hideBottomBar: boolean; // hide Obsidian's bottom add-to-canvas bar (.canvas-card-menu)
 	toolbarScale: number; // scale factor for Canvas Kit's own toolbar (1 = default)
+	pinDrawSubbar: boolean; // keep the draw sub-toolbar visible in every mode
 	myscriptAppKey: string; // MyScript Cloud application key (handwriting → text)
 	myscriptHmacKey: string; // MyScript Cloud HMAC key
 	recognitionLang: string; // MyScript recognition language, e.g. en_US
@@ -33,6 +34,7 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	textSize: 20,
 	hideBottomBar: false,
 	toolbarScale: 1,
+	pinDrawSubbar: false,
 	myscriptAppKey: "",
 	myscriptHmacKey: "",
 	recognitionLang: "en_US",
@@ -423,6 +425,11 @@ export default class CanvasPencilPlugin extends Plugin {
 		for (const tb of this.toolbars.values()) tb.applyScale();
 	}
 
+	/** Re-apply the pinned-subbar setting to every live canvas toolbar. */
+	applySubbarPin() {
+		for (const tb of this.toolbars.values()) tb.applySubbarPin();
+	}
+
 	/** The toolbar attached to a given canvas instance (menus hand us the canvas). */
 	toolbarFor(canvas: CanvasLike | undefined): CanvasToolbar | null {
 		if (!canvas) return null;
@@ -681,7 +688,88 @@ class CanvasToolbar {
 		this.contextmenuHandler = () => this.activeTextEditor?.commit();
 		this.doc.addEventListener("contextmenu", this.contextmenuHandler, true);
 
+		this.bindUndoGestures();
+		if (this.plugin.settings.pinDrawSubbar) this.showMarkerSubBar();
 		this.refreshNodeStyles();
+	}
+
+	// --- universal touch gestures: two-finger tap = undo, three-finger = redo ---
+
+	private undoTouches = new Map<number, { x: number; y: number; sx: number; sy: number }>();
+	private undoTapStart = 0;
+	private undoTapMoved = false;
+	private undoTapMax = 0;
+	private undoGestureUnbind: (() => void) | null = null;
+
+	/**
+	 * Procreate-style undo gestures, bound at the CANVAS level (capture) so they
+	 * work in every mode — select, marquee, or any drawing tool — exactly like
+	 * the built-in undo/redo buttons. A quick multi-finger tap that never moves
+	 * doesn't collide with two-finger pan/zoom (ours or Obsidian's), which
+	 * always moves.
+	 */
+	private bindUndoGestures() {
+		const wrap = this.view.canvas!.wrapperEl;
+		const down = (e: PointerEvent) => {
+			if (e.pointerType !== "touch") return;
+			this.undoTouches.set(e.pointerId, {
+				x: e.clientX,
+				y: e.clientY,
+				sx: e.clientX,
+				sy: e.clientY,
+			});
+			if (this.undoTouches.size === 2) {
+				this.undoTapStart = Date.now();
+				this.undoTapMoved = false;
+				this.undoTapMax = 2;
+				for (const t of this.undoTouches.values()) {
+					t.sx = t.x;
+					t.sy = t.y;
+				}
+			} else if (this.undoTouches.size > 2) {
+				this.undoTapMax = Math.max(this.undoTapMax, this.undoTouches.size);
+			}
+		};
+		const move = (e: PointerEvent) => {
+			if (e.pointerType !== "touch") return;
+			const t = this.undoTouches.get(e.pointerId);
+			if (!t) return;
+			t.x = e.clientX;
+			t.y = e.clientY;
+			if (
+				this.undoTouches.size >= 2 &&
+				Math.hypot(t.x - t.sx, t.y - t.sy) > 12
+			) {
+				this.undoTapMoved = true;
+			}
+		};
+		const up = (e: PointerEvent) => {
+			if (e.pointerType !== "touch") return;
+			if (!this.undoTouches.delete(e.pointerId)) return;
+			if (this.undoTouches.size < 2 && this.undoTapMax >= 2) {
+				const isTap = !this.undoTapMoved && Date.now() - this.undoTapStart < 300;
+				const count = this.undoTapMax;
+				this.undoTapMax = 0;
+				if (isTap) {
+					try {
+						if (count >= 3) this.view.canvas?.redo?.();
+						else this.view.canvas?.undo?.();
+					} catch (err) {
+						console.warn("Canvas Kit: gesture undo failed", err);
+					}
+				}
+			}
+		};
+		wrap.addEventListener("pointerdown", down, true);
+		wrap.addEventListener("pointermove", move, true);
+		wrap.addEventListener("pointerup", up, true);
+		wrap.addEventListener("pointercancel", up, true);
+		this.undoGestureUnbind = () => {
+			wrap.removeEventListener("pointerdown", down, true);
+			wrap.removeEventListener("pointermove", move, true);
+			wrap.removeEventListener("pointerup", up, true);
+			wrap.removeEventListener("pointercancel", up, true);
+		};
 	}
 
 	private refreshScheduled = false;
@@ -733,6 +821,9 @@ class CanvasToolbar {
 		} else if (tool !== "select") {
 			this.overlay = new DragCreateOverlay(this, tool);
 		}
+		// Pinned draw kit: keep the marker sub-toolbar up in modes that don't
+		// bring their own sub-bar (select, marquee, text, section, table, image).
+		if (!this.subBarEl && this.plugin.settings.pinDrawSubbar) this.showMarkerSubBar();
 	}
 
 	/**
@@ -807,6 +898,15 @@ class CanvasToolbar {
 		this.setTool("select");
 	}
 
+	/** Sync the sub-toolbar with the pinned-draw-kit setting without a reload. */
+	applySubbarPin() {
+		const pin = this.plugin.settings.pinDrawSubbar;
+		if (pin && !this.subBarEl) this.showMarkerSubBar();
+		else if (!pin && this.subBarEl && this.tool !== "marker" && this.tool !== "card") {
+			this.hideSubBar();
+		}
+	}
+
 	/**
 	 * iPad: the on-screen keyboard scrolls the app (window and/or workspace
 	 * ancestors) to keep the caret visible and doesn't always scroll it back,
@@ -846,7 +946,11 @@ class CanvasToolbar {
 			if (m.svg) setSvg(btn, m.svg);
 			else setIcon(btn, m.icon);
 			if (m.id === this.markerMode) btn.addClass("is-active");
-			btn.addEventListener("click", () => this.setMarkerMode(m.id));
+			btn.addEventListener("click", () => {
+				// From the pinned sub-bar, picking a mode also enters the draw tool.
+				if (this.tool !== "marker") this.setTool("marker");
+				this.setMarkerMode(m.id);
+			});
 		}
 
 		sub.createDiv({ cls: "canvas-pencil-divider" });
@@ -2064,6 +2168,8 @@ class CanvasToolbar {
 		}
 		this.closeCardSearch();
 		this.hideSubBar();
+		this.undoGestureUnbind?.();
+		this.undoGestureUnbind = null;
 		this.barEl.remove();
 	}
 }
@@ -2075,10 +2181,6 @@ abstract class ToolOverlay {
 	protected destroyed = false;
 	private touchPts = new Map<number, { x: number; y: number }>();
 	private gestureActive = false;
-	private gestureStartTime = 0;
-	private gestureMoved = false;
-	private gestureMaxTouches = 0;
-	private gestureStartPos = new Map<number, { x: number; y: number }>();
 
 	constructor(protected tb: CanvasToolbar, cls: string) {
 		this.el = tb.view.canvas!.wrapperEl.createDiv({ cls: `canvas-pencil-overlay ${cls}` });
@@ -2111,26 +2213,13 @@ abstract class ToolOverlay {
 			this.touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
 			if (this.touchPts.size === 2 && !this.gestureActive) {
 				this.gestureActive = true;
-				this.gestureStartTime = Date.now();
-				this.gestureMoved = false;
-				this.gestureMaxTouches = 2;
-				this.gestureStartPos = new Map(this.touchPts);
 				this.onGestureStart();
-			} else if (this.gestureActive) {
-				this.gestureMaxTouches = Math.max(this.gestureMaxTouches, this.touchPts.size);
-				this.gestureStartPos.set(e.pointerId, { x: e.clientX, y: e.clientY });
 			}
 		};
 		const move = (e: PointerEvent) => {
 			if (e.pointerType !== "touch") return;
 			const prev = this.touchPts.get(e.pointerId);
 			if (!prev) return;
-			if (this.gestureActive && !this.gestureMoved) {
-				const start = this.gestureStartPos.get(e.pointerId);
-				if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12) {
-					this.gestureMoved = true;
-				}
-			}
 			if (!this.gestureActive || this.touchPts.size !== 2) {
 				this.touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
 				return;
@@ -2151,29 +2240,12 @@ abstract class ToolOverlay {
 		const up = (e: PointerEvent) => {
 			if (e.pointerType !== "touch") return;
 			this.touchPts.delete(e.pointerId);
-			if (this.touchPts.size < 2 && this.gestureActive) {
-				this.gestureActive = false;
-				this.onGestureEnd();
-			}
+			if (this.touchPts.size < 2) this.gestureActive = false;
 		};
 		this.el.addEventListener("pointerdown", down, true);
 		this.el.addEventListener("pointermove", move, true);
 		this.el.addEventListener("pointerup", up, true);
 		this.el.addEventListener("pointercancel", up, true);
-	}
-
-	/**
-	 * A multi-finger gesture that never moved and ended fast is a TAP
-	 * (Procreate-style): two fingers undo, three fingers redo.
-	 */
-	private onGestureEnd() {
-		if (Date.now() - this.gestureStartTime >= 300 || this.gestureMoved) return;
-		try {
-			if (this.gestureMaxTouches >= 3) this.canvas.redo?.();
-			else this.canvas.undo?.();
-		} catch (err) {
-			console.warn("Canvas Kit: gesture undo failed", err);
-		}
 	}
 
 	/**
@@ -2616,6 +2688,13 @@ class MarqueeSelectOverlay extends ToolOverlay {
 	private hintEl: HTMLElement;
 	private start: { x: number; y: number } | null = null; // client coords
 	private startWorld: { x: number; y: number } | null = null;
+	/** Current selection + its world bbox; a drag INSIDE the box moves it. */
+	private selected: CanvasNodeLike[] = [];
+	private selBox: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+	private moveStartWorld: { x: number; y: number } | null = null;
+	private moveOrig: Map<CanvasNodeLike, { x: number; y: number; w: number; h: number }> | null =
+		null;
+	private moved = false;
 
 	constructor(tb: CanvasToolbar) {
 		super(tb, "canvas-pencil-overlay-section");
@@ -2631,15 +2710,56 @@ class MarqueeSelectOverlay extends ToolOverlay {
 			if (e.button !== 0) return;
 			if (this.gesturing() || (e.pointerType === "touch" && !e.isPrimary)) return;
 			this.el.setPointerCapture(e.pointerId);
-			this.start = { x: e.clientX, y: e.clientY };
-			this.startWorld = this.worldFromClient(e.clientX, e.clientY);
 			this.hintEl.hide();
+			const w = this.worldFromClient(e.clientX, e.clientY);
+			// Pointer landed inside the current selection → move it (pencil,
+			// finger, or mouse alike — no long-press needed).
+			const PAD = 12;
+			if (
+				this.selBox &&
+				this.selected.length &&
+				w.x >= this.selBox.minX - PAD &&
+				w.x <= this.selBox.maxX + PAD &&
+				w.y >= this.selBox.minY - PAD &&
+				w.y <= this.selBox.maxY + PAD
+			) {
+				this.moveStartWorld = w;
+				this.moved = false;
+				this.moveOrig = new Map(
+					this.selected.map((n) => [
+						n,
+						{ x: n.x ?? 0, y: n.y ?? 0, w: n.width ?? 0, h: n.height ?? 0 },
+					])
+				);
+			} else {
+				this.clearSelection();
+				this.start = { x: e.clientX, y: e.clientY };
+				this.startWorld = w;
+			}
 			e.preventDefault();
 		});
 		this.el.addEventListener("pointermove", (e) => {
 			if (this.gesturing()) return;
+			if (this.moveStartWorld && this.moveOrig) {
+				const w = this.worldFromClient(e.clientX, e.clientY);
+				const dx = w.x - this.moveStartWorld.x;
+				const dy = w.y - this.moveStartWorld.y;
+				if (Math.abs(dx) + Math.abs(dy) > 0.5) this.moved = true;
+				for (const [n, o] of this.moveOrig) {
+					(n as unknown as { moveAndResize?: (r: TextBox) => void }).moveAndResize?.({
+						x: Math.round(o.x + dx),
+						y: Math.round(o.y + dy),
+						width: o.w,
+						height: o.h,
+					});
+				}
+				return;
+			}
 			const r = this.el.getBoundingClientRect();
 			if (!this.start) {
+				this.hintEl.setText(
+					this.selected.length ? "Drag the selection to move it" : "Drag to select"
+				);
 				this.hintEl.style.left = `${e.clientX - r.left + 14}px`;
 				this.hintEl.style.top = `${e.clientY - r.top + 14}px`;
 				this.hintEl.show();
@@ -2652,6 +2772,10 @@ class MarqueeSelectOverlay extends ToolOverlay {
 			this.rectEl.show();
 		});
 		this.el.addEventListener("pointerup", (e) => {
+			if (this.moveStartWorld) {
+				this.endMove(e);
+				return;
+			}
 			if (!this.start || !this.startWorld) return;
 			const a = this.startWorld;
 			const b = this.worldFromClient(e.clientX, e.clientY);
@@ -2666,7 +2790,7 @@ class MarqueeSelectOverlay extends ToolOverlay {
 			};
 			// A tap (no real drag) just clears the selection and stays armed.
 			if (bbox.maxX - bbox.minX < 4 && bbox.maxY - bbox.minY < 4) {
-				canvas.deselectAll?.();
+				this.clearSelection();
 				return;
 			}
 			let nodes: CanvasNodeLike[] = [];
@@ -2677,17 +2801,77 @@ class MarqueeSelectOverlay extends ToolOverlay {
 			}
 			if (nodes.length && typeof canvas.selectAll === "function") {
 				canvas.selectAll(nodes);
-				// Hand off to the native Select tool so the selection can be
-				// dragged/deleted immediately.
-				this.tb.revertToSelect();
+				this.selected = nodes;
+				this.updateSelBox();
 			} else {
-				canvas.deselectAll?.();
+				this.clearSelection();
 			}
 		});
 	}
 
-	/** Second finger landed — this is a pan/zoom; abandon the marquee drag. */
+	/** Commit a selection move: save once (one undo step for the whole drag). */
+	private endMove(e: PointerEvent) {
+		if (this.moveStartWorld && this.moveOrig && this.moved) {
+			const w = this.worldFromClient(e.clientX, e.clientY);
+			const dx = w.x - this.moveStartWorld.x;
+			const dy = w.y - this.moveStartWorld.y;
+			if (this.selBox) {
+				this.selBox = {
+					minX: this.selBox.minX + dx,
+					minY: this.selBox.minY + dy,
+					maxX: this.selBox.maxX + dx,
+					maxY: this.selBox.maxY + dy,
+				};
+			}
+			this.canvas.requestSave?.();
+		}
+		this.moveStartWorld = null;
+		this.moveOrig = null;
+		this.moved = false;
+	}
+
+	private updateSelBox() {
+		if (!this.selected.length) {
+			this.selBox = null;
+			return;
+		}
+		let minX = Infinity;
+		let minY = Infinity;
+		let maxX = -Infinity;
+		let maxY = -Infinity;
+		for (const n of this.selected) {
+			minX = Math.min(minX, n.x ?? 0);
+			minY = Math.min(minY, n.y ?? 0);
+			maxX = Math.max(maxX, (n.x ?? 0) + (n.width ?? 0));
+			maxY = Math.max(maxY, (n.y ?? 0) + (n.height ?? 0));
+		}
+		this.selBox = { minX, minY, maxX, maxY };
+	}
+
+	private clearSelection() {
+		this.selected = [];
+		this.selBox = null;
+		this.canvas.deselectAll?.();
+	}
+
+	/** Second finger landed — this is a pan/zoom; abandon drag or move. */
 	protected onGestureStart() {
+		if (this.moveStartWorld) {
+			// Snap the nodes back — a pan shouldn't half-move the selection.
+			if (this.moveOrig) {
+				for (const [n, o] of this.moveOrig) {
+					(n as unknown as { moveAndResize?: (r: TextBox) => void }).moveAndResize?.({
+						x: o.x,
+						y: o.y,
+						width: o.w,
+						height: o.h,
+					});
+				}
+			}
+			this.moveStartWorld = null;
+			this.moveOrig = null;
+			this.moved = false;
+		}
 		this.start = this.startWorld = null;
 		this.rectEl.hide();
 		this.hintEl.hide();
@@ -4277,6 +4461,19 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 						this.plugin.applyToolbarScale();
 					})
+			);
+
+		new Setting(containerEl)
+			.setName("Always show draw sub-toolbar")
+			.setDesc(
+				"Keep the draw kit (marker / highlighter / tape / eraser + colors) visible in every mode. Picking a sub-tool from it activates drawing."
+			)
+			.addToggle((t) =>
+				t.setValue(this.plugin.settings.pinDrawSubbar).onChange(async (v) => {
+					this.plugin.settings.pinDrawSubbar = v;
+					await this.plugin.saveSettings();
+					this.plugin.applySubbarPin();
+				})
 			);
 
 		new Setting(containerEl)
