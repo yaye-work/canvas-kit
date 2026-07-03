@@ -53,6 +53,7 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 /* ---- marker sub toolbar: [modes] | [size] | [colors or tape patterns] ---- */
 
 .canvas-pencil-subbar {
+	animation: canvas-pencil-subbar-in 0.16s cubic-bezier(0.15, 1.25, 0.3, 1);
 	position: absolute;
 	top: 66px;
 	left: 50%;
@@ -1284,4 +1285,16 @@ body .canvas-wrapper .canvas-controls {
 .canvas-kit-search-panel button.canvas-kit-search-done:hover {
 	background-color: var(--interactive-accent-hover);
 	box-shadow: none;
+}
+
+/* sub-bars drop in from the toolbar with the same snappy overshoot as search */
+@keyframes canvas-pencil-subbar-in {
+	from {
+		opacity: 0;
+		transform: translateX(-50%) translateY(-10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(-50%) translateY(0);
+	}
 }
