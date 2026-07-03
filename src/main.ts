@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	strokeSize: 6,
 	tapeImage: null,
 	textSize: 20,
-	hideBottomBar: false,
+	hideBottomBar: true,
 	toolbarScale: 1.5,
 	myscriptAppKey: "",
 	myscriptHmacKey: "",
@@ -848,6 +848,8 @@ class CanvasToolbar {
 		this.searchVVUnbind?.();
 		this.searchVVUnbind = null;
 		this.clearSearchMarks();
+		// iPad: the keyboard can leave the whole app scrolled up — pin it back.
+		this.restoreViewportPosition();
 		this.searchPanelEl?.remove();
 		this.searchPanelEl = null;
 		this.searchInputEl = null;
