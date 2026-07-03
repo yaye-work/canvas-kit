@@ -8,7 +8,6 @@ import {
 	PluginSettingTab,
 	Setting,
 	TFile,
-	requestUrl,
 	setIcon,
 } from "obsidian";
 import { getStroke } from "perfect-freehand";
@@ -22,9 +21,6 @@ interface CanvasPencilSettings {
 	textSize: number; // starting font size for new text (in canvas units)
 	hideBottomBar: boolean; // hide Obsidian's bottom add-to-canvas bar (.canvas-card-menu)
 	toolbarScale: number; // scale factor for Canvas Kit's own toolbar (1 = default)
-	myscriptAppKey: string; // MyScript Cloud application key (handwriting → text)
-	myscriptHmacKey: string; // MyScript Cloud HMAC key
-	recognitionLang: string; // MyScript recognition language, e.g. en_US
 }
 
 const DEFAULT_SETTINGS: CanvasPencilSettings = {
@@ -34,9 +30,6 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	textSize: 20,
 	hideBottomBar: true,
 	toolbarScale: 1.25,
-	myscriptAppKey: "",
-	myscriptHmacKey: "",
-	recognitionLang: "en_US",
 };
 
 // Designed preset row (Figma): black (default), red, yellow, green, blue,
@@ -369,54 +362,6 @@ export default class CanvasPencilPlugin extends Plugin {
 				return true;
 			},
 		});
-
-		// Right-click menu: "Convert to text" on ink nodes / selections of them.
-		this.registerEvent(
-			this.app.workspace.on(
-				// Canvas menu events aren't in the public typings.
-				"canvas:node-menu" as "quick-preview",
-				((menu: Menu, node: CanvasNodeLike & { canvas?: CanvasLike }) => {
-					if (!isInkNode(node)) return;
-					const tb = this.toolbarFor(node.canvas);
-					if (!tb) return;
-					menu.addItem((item) =>
-						item
-							.setSection("canvas")
-							.setTitle("Convert to text")
-							.setIcon("type")
-							.onClick(() => void tb.convertInkToText(node))
-					);
-				}) as unknown as () => void
-			)
-		);
-		this.registerEvent(
-			this.app.workspace.on(
-				"canvas:selection-menu" as "quick-preview",
-				((menu: Menu, canvas: CanvasLike) => {
-					const tb = this.toolbarFor(canvas);
-					if (!tb || !canvas.selection) return;
-					// Keep drawing order (canvas.nodes is insertion-ordered).
-					const selected: CanvasNodeLike[] = [];
-					if (canvas.nodes) {
-						for (const n of canvas.nodes.values()) {
-							if (canvas.selection.has(n) && isInkNode(n)) selected.push(n);
-						}
-					}
-					if (!selected.length) return;
-					menu.addItem((item) =>
-						item
-							.setSection("canvas")
-							.setTitle(
-								selected.length > 1
-									? `Convert ${selected.length} strokes to text`
-									: "Convert to text"
-							)
-							.setIcon("type")
-							.onClick(() => void tb.convertInkNodes(selected))
-					);
-				}) as unknown as () => void
-			)
-		);
 
 		this.registerEvent(this.app.workspace.on("layout-change", () => this.attachToolbars()));
 		this.registerEvent(
@@ -785,7 +730,6 @@ class CanvasToolbar {
 	private searchDebounce = 0;
 	private searchOutside: ((e: PointerEvent) => void) | null = null;
 	private searchVVUnbind: (() => void) | null = null;
-	private inkIndexPromise: Promise<void> | null = null;
 
 	private buildSearchButton() {
 		const wrap = this.view.canvas!.wrapperEl;
@@ -896,16 +840,6 @@ class CanvasToolbar {
 		prev.addEventListener("click", () => this.stepSearch(-1));
 		next.addEventListener("click", () => this.stepSearch(1));
 
-		// Handwriting: build (or reuse) the recognized-text index in the
-		// background, then re-run the query so ink results appear.
-		const settings = this.plugin.settings;
-		if (settings.myscriptAppKey && settings.myscriptHmacKey && this.hasUnindexedInk()) {
-			this.searchStatusEl.setText("Reading handwriting…");
-			void this.ensureInkIndex().then(() => {
-				this.searchStatusEl?.setText("");
-				if (this.searchInputEl?.value) this.runSearch(this.searchInputEl.value);
-			});
-		}
 		// Tapping anywhere outside the panel (canvas, toolbar, …) collapses it.
 		this.searchOutside = (e: PointerEvent) => {
 			const t = e.target as Node;
@@ -976,15 +910,12 @@ class CanvasToolbar {
 		});
 	}
 
-	/** What a node contributes to search. Ink contributes its recognized text. */
+	/** What a node contributes to search. */
 	private nodeSearchText(node: CanvasNodeLike): string {
 		const d = node.getData?.() ?? {};
 		const label = typeof d.label === "string" ? d.label : "";
 		if (this.searchSectionsOnly) return d.type === "group" ? label : "";
-		if (isInkNode(node)) {
-			const rec = d.pencilRecognized ?? node.unknownData?.pencilRecognized;
-			return typeof rec === "string" ? rec : "";
-		}
+		if (isInkNode(node)) return "";
 		const parts = [label];
 		if (typeof d.text === "string") parts.push(d.text);
 		if (typeof d.file === "string") parts.push(d.file);
@@ -1045,73 +976,6 @@ class CanvasToolbar {
 			maxX: x + w + pad,
 			maxY: y + h + pad,
 		});
-	}
-
-	private hasUnindexedInk(): boolean {
-		const canvas = this.view.canvas;
-		if (!canvas?.nodes) return false;
-		for (const n of canvas.nodes.values()) {
-			if (!isInkNode(n) || !inkStrokesOf(n)) continue;
-			const d = n.getData?.() ?? {};
-			if (typeof (d.pencilRecognized ?? n.unknownData?.pencilRecognized) !== "string") {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Recognize every un-indexed handwriting cluster ONCE and cache the text on
-	 * the nodes (pencilRecognized, persisted without an undo entry). Ink is
-	 * immutable after commit, so the cache never goes stale; erasing + redrawing
-	 * makes new nodes that get indexed on the next search.
-	 */
-	private ensureInkIndex(): Promise<void> {
-		if (this.inkIndexPromise) return this.inkIndexPromise;
-		this.inkIndexPromise = (async () => {
-			const canvas = this.view.canvas;
-			const settings = this.plugin.settings;
-			if (!canvas?.nodes || !settings.myscriptAppKey || !settings.myscriptHmacKey) return;
-			const seen = new Set<CanvasNodeLike>();
-			let wrote = false;
-			for (const n of [...canvas.nodes.values()]) {
-				if (seen.has(n) || !isInkNode(n) || !inkStrokesOf(n)) continue;
-				const cluster = this.collectInkCluster(n);
-				for (const c of cluster) seen.add(c);
-				const cached = cluster.some(
-					(c) =>
-						typeof (c.getData?.().pencilRecognized ?? c.unknownData?.pencilRecognized) ===
-						"string"
-				);
-				if (cached) continue;
-				const strokes: InkStroke[] = [];
-				for (const c of cluster) strokes.push(...(inkStrokesOf(c) ?? []));
-				if (!strokes.length) continue;
-				let text = "";
-				try {
-					text = await recognizeInk(strokes, settings);
-				} catch (err) {
-					console.warn("Canvas Kit: handwriting indexing stopped", err);
-					break; // quota/network — don't hammer the API
-				}
-				for (const c of cluster) {
-					try {
-						if (c.getData && c.setData) {
-							const cd = c.getData();
-							cd.pencilRecognized = text;
-							c.setData(cd);
-							wrote = true;
-						}
-					} catch (err) {
-						console.warn("Canvas Kit: couldn't cache recognized text", err);
-					}
-				}
-			}
-			if (wrote) canvas.requestSave?.(false); // persist cache, no undo entry
-		})().finally(() => {
-			this.inkIndexPromise = null;
-		});
-		return this.inkIndexPromise;
 	}
 
 	// --- universal touch gestures: two-finger tap = undo, three-finger = redo ---
@@ -2241,175 +2105,6 @@ class CanvasToolbar {
 		return found;
 	}
 
-	// --- handwriting → text (double-tap an ink node) ---
-
-	private recognizingInk = false;
-
-	/**
-	 * Double-tap/double-click an ink node to convert the handwriting to text.
-	 * Still swallows the dblclick in capture (like blockDblClick did) so
-	 * Obsidian's raw-SVG editor never opens; a manual two-pointerup detector
-	 * backs it up because dblclick is unreliable in the iPad webview.
-	 */
-	private bindInkRecognition(node: CanvasNodeLike, el: HTMLElement) {
-		if (el.dataset.cpInkTap) return;
-		el.dataset.cpInkTap = "1";
-		el.addEventListener(
-			"dblclick",
-			(e) => {
-				e.preventDefault();
-				e.stopImmediatePropagation();
-				void this.convertInkToText(node);
-			},
-			true
-		);
-		let lastTap = 0;
-		let lastX = 0;
-		let lastY = 0;
-		el.addEventListener("pointerup", (e) => {
-			if (e.pointerType === "mouse") return; // mouse gets real dblclick
-			const now = Date.now();
-			if (now - lastTap < 350 && Math.hypot(e.clientX - lastX, e.clientY - lastY) < 30) {
-				lastTap = 0;
-				void this.convertInkToText(node);
-			} else {
-				lastTap = now;
-				lastX = e.clientX;
-				lastY = e.clientY;
-			}
-		});
-	}
-
-	/**
-	 * A word/line of handwriting is MANY one-stroke ink nodes, so recognizing
-	 * only the tapped node would return a single letter. Grow a cluster from the
-	 * tapped node: keep absorbing ink nodes whose boxes come within a gap
-	 * threshold of the cluster's bounding box until it stabilizes.
-	 */
-	private collectInkCluster(seed: CanvasNodeLike): CanvasNodeLike[] {
-		const canvas = this.view.canvas;
-		const all: CanvasNodeLike[] = [];
-		if (canvas?.nodes) {
-			for (const n of canvas.nodes.values()) {
-				if (isInkNode(n) && inkStrokesOf(n)) all.push(n);
-			}
-		}
-		const box = (n: CanvasNodeLike) => ({
-			x: n.x ?? 0,
-			y: n.y ?? 0,
-			r: (n.x ?? 0) + (n.width ?? 0),
-			b: (n.y ?? 0) + (n.height ?? 0),
-		});
-		const seedBox = box(seed);
-		const gap = Math.max(40, (seedBox.b - seedBox.y) / 2);
-		const cluster = new Set<CanvasNodeLike>([seed]);
-		let { x: minX, y: minY, r: maxX, b: maxY } = seedBox;
-		let changed = true;
-		while (changed) {
-			changed = false;
-			for (const n of all) {
-				if (cluster.has(n)) continue;
-				const nb = box(n);
-				const dx = Math.max(0, Math.max(minX - nb.r, nb.x - maxX));
-				const dy = Math.max(0, Math.max(minY - nb.b, nb.y - maxY));
-				if (Math.hypot(dx, dy) > gap) continue;
-				cluster.add(n);
-				minX = Math.min(minX, nb.x);
-				minY = Math.min(minY, nb.y);
-				maxX = Math.max(maxX, nb.r);
-				maxY = Math.max(maxY, nb.b);
-				changed = true;
-			}
-		}
-		// Preserve drawing order (canvas.nodes is insertion-ordered).
-		return all.filter((n) => cluster.has(n));
-	}
-
-	/** Double-tap entry point: recognize the tapped node PLUS its neighbors. */
-	async convertInkToText(seed: CanvasNodeLike) {
-		if (!inkStrokesOf(seed)) {
-			new Notice("Canvas Kit: no stroke data — this ink was drawn with an older version.");
-			return;
-		}
-		await this.convertInkNodes(this.collectInkCluster(seed));
-	}
-
-	/** Recognize EXACTLY these ink nodes and swap them for one text node.
-	 *  Used directly by the right-click menu on a selection — the user chose
-	 *  the set, so no proximity clustering is applied. */
-	async convertInkNodes(cluster: CanvasNodeLike[]) {
-		if (this.recognizingInk) return;
-		const canvas = this.view.canvas;
-		if (!canvas) return;
-		const settings = this.plugin.settings;
-		if (!settings.myscriptAppKey || !settings.myscriptHmacKey) {
-			new Notice("Canvas Kit: add your MyScript keys in settings to convert handwriting.");
-			return;
-		}
-		const strokes: InkStroke[] = [];
-		cluster = cluster.filter((n) => inkStrokesOf(n));
-		for (const n of cluster) strokes.push(...(inkStrokesOf(n) ?? []));
-		if (!strokes.length) {
-			new Notice("Canvas Kit: no stroke data — this ink was drawn with an older version.");
-			return;
-		}
-
-		this.recognizingInk = true;
-		const els = cluster.map((n) => n.nodeEl).filter((e): e is HTMLElement => !!e);
-		for (const e of els) e.addClass("canvas-pencil-recognizing");
-		try {
-			const text = await recognizeInk(strokes, settings);
-			if (!text) {
-				new Notice("Canvas Kit: couldn't read that handwriting.");
-				return;
-			}
-			// Size the text to roughly match the handwriting's footprint.
-			let minX = Infinity;
-			let minY = Infinity;
-			let maxY = -Infinity;
-			for (const n of cluster) {
-				minX = Math.min(minX, n.x ?? 0);
-				minY = Math.min(minY, n.y ?? 0);
-				maxY = Math.max(maxY, (n.y ?? 0) + (n.height ?? 0));
-			}
-			const lines = text.split("\n").length;
-			const fontSize = Math.round(
-				Math.min(120, Math.max(8, (maxY - minY) / (lines * TEXT_LINE_HEIGHT)))
-			);
-			const box = textBox(text, fontSize, { x: minX, y: minY });
-			const node = canvas.createTextNode?.({
-				pos: { x: box.x, y: box.y },
-				size: { width: box.width, height: box.height },
-				text: textToMarkdown(text),
-				save: true,
-				focus: false,
-			});
-			if (node) tagTextNode(node, fontSize, box);
-			for (const n of cluster) canvas.removeNode?.(n);
-			canvas.deselectAll?.();
-			canvas.requestSave?.();
-			// Same settle dance as the text tool's commit.
-			const settle = () => {
-				this.refreshNodeStyles();
-				if (node) this.fitTextNode(node);
-			};
-			this.refreshNodeStyles();
-			window.requestAnimationFrame(settle);
-			window.setTimeout(settle, 80);
-			window.setTimeout(settle, 250);
-		} catch (err) {
-			console.error("Canvas Kit: handwriting recognition failed", err);
-			new Notice(
-				err instanceof Error && err.message
-					? `Canvas Kit: ${err.message}`
-					: "Canvas Kit: handwriting recognition failed."
-			);
-		} finally {
-			this.recognizingInk = false;
-			for (const e of els) e.removeClass("canvas-pencil-recognizing");
-		}
-	}
-
 	private hideSubBar() {
 		this.subBarEl?.remove();
 		this.subBarEl = null;
@@ -2435,7 +2130,7 @@ class CanvasToolbar {
 					"canvas-pencil-highlight-ink",
 					text.includes("cp-ink-highlight") || text.includes("stroke-opacity=")
 				);
-				this.bindInkRecognition(node, el);
+				blockDblClick(el); // never open Obsidian's raw-SVG editor
 				// Never open raw SVG source. The toolbar's Edit button calls
 				// startEditing — repurpose it to re-enter the marker tool so the
 				// user can keep drawing (there's nothing to text-edit here).
@@ -4727,90 +4422,12 @@ function pencilKind(node: CanvasNodeLike): string | undefined {
 	return typeof fromUnknown === "string" ? fromUnknown : undefined;
 }
 
-// ---------- Handwriting recognition (MyScript Cloud) ----------
+// ---------- Ink stroke data ----------
 
-/** One captured stroke as parallel coordinate arrays (MyScript's wire format). */
+/** One captured stroke as parallel coordinate arrays. */
 interface InkStroke {
 	x: number[];
 	y: number[];
-}
-
-/** Read back the raw strokes stamped on an ink node (null for pre-0.2 ink). */
-function inkStrokesOf(node: CanvasNodeLike): InkStroke[] | null {
-	const d = node.getData?.() ?? {};
-	const u = node.unknownData ?? {};
-	const raw = d.pencilInk ?? u.pencilInk;
-	if (!Array.isArray(raw) || !raw.length) return null;
-	const strokes: InkStroke[] = [];
-	for (const st of raw) {
-		const o = st as { x?: unknown; y?: unknown };
-		if (Array.isArray(o?.x) && Array.isArray(o?.y) && o.x.length && o.x.length === o.y.length) {
-			strokes.push({ x: o.x.map(Number), y: o.y.map(Number) });
-		}
-	}
-	return strokes.length ? strokes : null;
-}
-
-/** MyScript REST auth: hex HMAC-SHA512 of the body, keyed app-key + hmac-key. */
-async function myscriptHmac(appKey: string, hmacKey: string, body: string): Promise<string> {
-	const enc = new TextEncoder();
-	const key = await crypto.subtle.importKey(
-		"raw",
-		enc.encode(appKey + hmacKey),
-		{ name: "HMAC", hash: "SHA-512" },
-		false,
-		["sign"]
-	);
-	const sig = await crypto.subtle.sign("HMAC", key, enc.encode(body));
-	return Array.from(new Uint8Array(sig))
-		.map((b) => b.toString(16).padStart(2, "0"))
-		.join("");
-}
-
-/**
- * Recognize handwriting via MyScript Cloud's batch endpoint (the engine behind
- * MyScript Notes). Strokes are translated to a non-negative origin — canvas
- * world coordinates can be negative, which the recognizer dislikes. Sent with
- * Obsidian's requestUrl so CORS never applies (matters in the iPad webview).
- */
-async function recognizeInk(strokes: InkStroke[], settings: CanvasPencilSettings): Promise<string> {
-	let minX = Infinity;
-	let minY = Infinity;
-	for (const st of strokes) {
-		for (const v of st.x) if (v < minX) minX = v;
-		for (const v of st.y) if (v < minY) minY = v;
-	}
-	const shifted = strokes.map((st) => ({
-		x: st.x.map((v) => Math.round(v - minX + 10)),
-		y: st.y.map((v) => Math.round(v - minY + 10)),
-	}));
-	const body = JSON.stringify({
-		configuration: { lang: settings.recognitionLang || "en_US" },
-		xDPI: 96,
-		yDPI: 96,
-		contentType: "Text",
-		strokeGroups: [{ strokes: shifted }],
-	});
-	const hmac = await myscriptHmac(settings.myscriptAppKey, settings.myscriptHmacKey, body);
-	const resp = await requestUrl({
-		url: "https://cloud.myscript.com/api/v4.0/iink/batch",
-		method: "POST",
-		contentType: "application/json",
-		headers: {
-			applicationKey: settings.myscriptAppKey,
-			hmac,
-			accept: "text/plain",
-		},
-		body,
-		throw: false,
-	});
-	if (resp.status === 401 || resp.status === 403) {
-		throw new Error("MyScript rejected the keys — check them in Canvas Kit settings.");
-	}
-	if (resp.status >= 400) {
-		throw new Error(`MyScript error ${resp.status}: ${(resp.text || "").slice(0, 120)}`);
-	}
-	return (resp.text ?? "").trim();
 }
 
 // ---------- Ink SVG builders ----------
@@ -5092,51 +4709,6 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 					this.plugin.settings.hideBottomBar = v;
 					await this.plugin.saveSettings();
 					this.plugin.applyBottomBarVisibility();
-				})
-			);
-
-		new Setting(containerEl).setName("Handwriting to text").setHeading();
-		const desc = containerEl.createEl("p", { cls: "setting-item-description" });
-		desc.appendText(
-			"Double-tap handwriting on the canvas to convert it to text (MyScript Cloud, the engine behind MyScript Notes). Register a free application at "
-		);
-		desc.createEl("a", {
-			text: "developer.myscript.com",
-			href: "https://developer.myscript.com/",
-		});
-		desc.appendText(" — the free tier covers 2,000 recognitions per month.");
-
-		new Setting(containerEl)
-			.setName("MyScript application key")
-			.addText((t) => {
-				t.inputEl.type = "password";
-				t.setPlaceholder("xxxxxxxx-xxxx-…")
-					.setValue(this.plugin.settings.myscriptAppKey)
-					.onChange(async (v) => {
-						this.plugin.settings.myscriptAppKey = v.trim();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(containerEl)
-			.setName("MyScript HMAC key")
-			.addText((t) => {
-				t.inputEl.type = "password";
-				t.setPlaceholder("xxxxxxxx-xxxx-…")
-					.setValue(this.plugin.settings.myscriptHmacKey)
-					.onChange(async (v) => {
-						this.plugin.settings.myscriptHmacKey = v.trim();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(containerEl)
-			.setName("Recognition language")
-			.setDesc("MyScript language code, e.g. en_US, de_DE, ja_JP, zh_CN.")
-			.addText((t) =>
-				t.setValue(this.plugin.settings.recognitionLang).onChange(async (v) => {
-					this.plugin.settings.recognitionLang = v.trim() || "en_US";
-					await this.plugin.saveSettings();
 				})
 			);
 
