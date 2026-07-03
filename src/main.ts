@@ -287,8 +287,9 @@ interface CanvasLike {
 		focus?: boolean;
 	}) => CanvasNodeLike | undefined;
 	removeNode?: (node: CanvasNodeLike) => void;
-	requestSave?: () => void;
+	requestSave?: (pushHistory?: boolean) => void;
 	deselectAll?: () => void;
+	zoomToBbox?: (bbox: { minX: number; minY: number; maxX: number; maxY: number }) => void;
 	selection?: Set<CanvasNodeLike>;
 	// Viewport + history internals (used for touch pan/zoom and gesture undo).
 	panBy?: (dx: number, dy: number) => void;
@@ -708,7 +709,255 @@ class CanvasToolbar {
 		this.doc.addEventListener("contextmenu", this.contextmenuHandler, true);
 
 		this.bindUndoGestures();
+		this.buildSearchButton();
 		this.refreshNodeStyles();
+	}
+
+	// --- canvas search (bottom-right): text, sections, and handwriting ---
+
+	private searchBtnEl: HTMLElement | null = null;
+	private searchPanelEl: HTMLElement | null = null;
+	private searchInputEl: HTMLInputElement | null = null;
+	private searchCountEl: HTMLElement | null = null;
+	private searchStatusEl: HTMLElement | null = null;
+	private searchMatches: CanvasNodeLike[] = [];
+	private searchIndex = 0;
+	private searchSectionsOnly = false;
+	private searchDebounce = 0;
+	private inkIndexPromise: Promise<void> | null = null;
+
+	private buildSearchButton() {
+		const wrap = this.view.canvas!.wrapperEl;
+		const btn = (this.searchBtnEl = wrap.createDiv({
+			cls: "canvas-kit-search-btn",
+			attr: { "aria-label": "Search the canvas" },
+		}));
+		setIcon(btn, "search");
+		btn.addEventListener("click", () => {
+			if (this.searchPanelEl) this.closeSearch();
+			else this.openSearchPanel();
+		});
+	}
+
+	private openSearchPanel() {
+		const wrap = this.view.canvas!.wrapperEl;
+		const panel = (this.searchPanelEl = wrap.createDiv({ cls: "canvas-kit-search-panel" }));
+
+		const row = panel.createDiv({ cls: "canvas-kit-search-row" });
+		const input = (this.searchInputEl = row.createEl("input", {
+			type: "text",
+			attr: { placeholder: "Search this canvas…", spellcheck: "false" },
+		}));
+		const prev = row.createDiv({
+			cls: "canvas-kit-search-nav",
+			attr: { "aria-label": "Previous match" },
+		});
+		setIcon(prev, "chevron-up");
+		const next = row.createDiv({
+			cls: "canvas-kit-search-nav",
+			attr: { "aria-label": "Next match" },
+		});
+		setIcon(next, "chevron-down");
+
+		const meta = panel.createDiv({ cls: "canvas-kit-search-meta" });
+		const toggle = meta.createEl("label", { cls: "canvas-kit-search-toggle" });
+		const box = toggle.createEl("input", { type: "checkbox" });
+		box.checked = this.searchSectionsOnly;
+		toggle.appendText(" Section names only");
+		this.searchCountEl = meta.createDiv({ cls: "canvas-kit-search-count" });
+		this.searchStatusEl = panel.createDiv({ cls: "canvas-kit-search-status" });
+
+		const rerun = () => this.runSearch(input.value);
+		input.addEventListener("input", () => {
+			window.clearTimeout(this.searchDebounce);
+			this.searchDebounce = window.setTimeout(rerun, 250);
+		});
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				this.stepSearch(e.shiftKey ? -1 : 1);
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				this.closeSearch();
+			}
+			e.stopPropagation();
+		});
+		box.addEventListener("change", () => {
+			this.searchSectionsOnly = box.checked;
+			rerun();
+		});
+		prev.addEventListener("click", () => this.stepSearch(-1));
+		next.addEventListener("click", () => this.stepSearch(1));
+
+		// Handwriting: build (or reuse) the recognized-text index in the
+		// background, then re-run the query so ink results appear.
+		const settings = this.plugin.settings;
+		if (settings.myscriptAppKey && settings.myscriptHmacKey && this.hasUnindexedInk()) {
+			this.searchStatusEl.setText("Reading handwriting…");
+			void this.ensureInkIndex().then(() => {
+				this.searchStatusEl?.setText("");
+				if (this.searchInputEl?.value) this.runSearch(this.searchInputEl.value);
+			});
+		}
+		window.setTimeout(() => input.focus(), 0);
+	}
+
+	private closeSearch() {
+		this.clearSearchMarks();
+		this.searchPanelEl?.remove();
+		this.searchPanelEl = null;
+		this.searchInputEl = null;
+		this.searchCountEl = null;
+		this.searchStatusEl = null;
+		this.searchMatches = [];
+	}
+
+	private clearSearchMarks() {
+		const wrap = this.view.canvas?.wrapperEl;
+		if (!wrap) return;
+		wrap.removeClass("canvas-kit-search-dim");
+		wrap.querySelectorAll(".canvas-kit-search-hit, .canvas-kit-search-current").forEach((el) => {
+			el.removeClass("canvas-kit-search-hit");
+			el.removeClass("canvas-kit-search-current");
+		});
+	}
+
+	/** What a node contributes to search. Ink contributes its recognized text. */
+	private nodeSearchText(node: CanvasNodeLike): string {
+		const d = node.getData?.() ?? {};
+		const label = typeof d.label === "string" ? d.label : "";
+		if (this.searchSectionsOnly) return d.type === "group" ? label : "";
+		if (isInkNode(node)) {
+			const rec = d.pencilRecognized ?? node.unknownData?.pencilRecognized;
+			return typeof rec === "string" ? rec : "";
+		}
+		const parts = [label];
+		if (typeof d.text === "string") parts.push(d.text);
+		if (typeof d.file === "string") parts.push(d.file);
+		return parts.filter(Boolean).join("\n");
+	}
+
+	private runSearch(query: string) {
+		const canvas = this.view.canvas;
+		if (!canvas?.nodes) return;
+		this.clearSearchMarks();
+		this.searchMatches = [];
+		this.searchIndex = 0;
+		const q = query.trim().toLowerCase();
+		if (!q) {
+			this.searchCountEl?.setText("");
+			return;
+		}
+		for (const node of canvas.nodes.values()) {
+			if (this.nodeSearchText(node).toLowerCase().includes(q)) {
+				this.searchMatches.push(node);
+			}
+		}
+		if (!this.searchMatches.length) {
+			this.searchCountEl?.setText("0 results");
+			return;
+		}
+		// Freeform-style: dim everything, spotlight the hits.
+		canvas.wrapperEl.addClass("canvas-kit-search-dim");
+		for (const n of this.searchMatches) n.nodeEl?.addClass("canvas-kit-search-hit");
+		this.focusSearchMatch();
+	}
+
+	private stepSearch(dir: number) {
+		if (!this.searchMatches.length) return;
+		this.searchIndex =
+			(this.searchIndex + dir + this.searchMatches.length) % this.searchMatches.length;
+		this.focusSearchMatch();
+	}
+
+	/** Zoom/pan to the current match and give it the strong highlight. */
+	private focusSearchMatch() {
+		const canvas = this.view.canvas;
+		const node = this.searchMatches[this.searchIndex];
+		if (!canvas || !node) return;
+		canvas.wrapperEl
+			.querySelectorAll(".canvas-kit-search-current")
+			.forEach((el) => el.removeClass("canvas-kit-search-current"));
+		node.nodeEl?.addClass("canvas-kit-search-current");
+		this.searchCountEl?.setText(`${this.searchIndex + 1} / ${this.searchMatches.length}`);
+		const x = node.x ?? 0;
+		const y = node.y ?? 0;
+		const w = node.width ?? 0;
+		const h = node.height ?? 0;
+		const pad = Math.max(120, w * 0.6, h * 0.6);
+		canvas.zoomToBbox?.({
+			minX: x - pad,
+			minY: y - pad,
+			maxX: x + w + pad,
+			maxY: y + h + pad,
+		});
+	}
+
+	private hasUnindexedInk(): boolean {
+		const canvas = this.view.canvas;
+		if (!canvas?.nodes) return false;
+		for (const n of canvas.nodes.values()) {
+			if (!isInkNode(n) || !inkStrokesOf(n)) continue;
+			const d = n.getData?.() ?? {};
+			if (typeof (d.pencilRecognized ?? n.unknownData?.pencilRecognized) !== "string") {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Recognize every un-indexed handwriting cluster ONCE and cache the text on
+	 * the nodes (pencilRecognized, persisted without an undo entry). Ink is
+	 * immutable after commit, so the cache never goes stale; erasing + redrawing
+	 * makes new nodes that get indexed on the next search.
+	 */
+	private ensureInkIndex(): Promise<void> {
+		if (this.inkIndexPromise) return this.inkIndexPromise;
+		this.inkIndexPromise = (async () => {
+			const canvas = this.view.canvas;
+			const settings = this.plugin.settings;
+			if (!canvas?.nodes || !settings.myscriptAppKey || !settings.myscriptHmacKey) return;
+			const seen = new Set<CanvasNodeLike>();
+			let wrote = false;
+			for (const n of [...canvas.nodes.values()]) {
+				if (seen.has(n) || !isInkNode(n) || !inkStrokesOf(n)) continue;
+				const cluster = this.collectInkCluster(n);
+				for (const c of cluster) seen.add(c);
+				const cached = cluster.some(
+					(c) =>
+						typeof (c.getData?.().pencilRecognized ?? c.unknownData?.pencilRecognized) ===
+						"string"
+				);
+				if (cached) continue;
+				const strokes: InkStroke[] = [];
+				for (const c of cluster) strokes.push(...(inkStrokesOf(c) ?? []));
+				if (!strokes.length) continue;
+				let text = "";
+				try {
+					text = await recognizeInk(strokes, settings);
+				} catch (err) {
+					console.warn("Canvas Kit: handwriting indexing stopped", err);
+					break; // quota/network — don't hammer the API
+				}
+				for (const c of cluster) {
+					try {
+						if (c.getData && c.setData) {
+							const cd = c.getData();
+							cd.pencilRecognized = text;
+							c.setData(cd);
+							wrote = true;
+						}
+					} catch (err) {
+						console.warn("Canvas Kit: couldn't cache recognized text", err);
+					}
+				}
+			}
+			if (wrote) canvas.requestSave?.(false); // persist cache, no undo entry
+		})().finally(() => {
+			this.inkIndexPromise = null;
+		});
+		return this.inkIndexPromise;
 	}
 
 	// --- universal touch gestures: two-finger tap = undo, three-finger = redo ---
@@ -2150,6 +2399,9 @@ class CanvasToolbar {
 		}
 		this.closeCardSearch();
 		this.hideSubBar();
+		this.closeSearch();
+		this.searchBtnEl?.remove();
+		this.searchBtnEl = null;
 		this.undoGestureUnbind?.();
 		this.undoGestureUnbind = null;
 		this.barEl.remove();

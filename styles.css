@@ -1077,3 +1077,123 @@ body .canvas-wrapper .canvas-controls {
 .canvas-pencil-size-inline input[type="range"] {
 	width: 96px;
 }
+
+/* ---- lucide (stroked) icons keep the desktop stroke weight — mobile bumps
+   --icon-stroke for touch, which reads too thick at toolbar zoom ---- */
+
+.canvas-pencil-bar .canvas-pencil-tool svg,
+.canvas-pencil-subbar .canvas-pencil-mode svg {
+	stroke-width: 1.75px;
+}
+
+/* ---- canvas search (bottom-right) ---- */
+
+.canvas-kit-search-btn {
+	position: absolute;
+	right: 18px;
+	bottom: 18px;
+	z-index: 115;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	cursor: pointer;
+	color: var(--text-muted);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-s);
+}
+
+.canvas-kit-search-btn:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.canvas-kit-search-panel {
+	position: absolute;
+	right: 18px;
+	bottom: 72px;
+	z-index: 125;
+	width: 300px;
+	max-width: 80vw;
+	padding: 10px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-l);
+	box-shadow: var(--shadow-l);
+}
+
+.canvas-kit-search-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.canvas-kit-search-row input[type="text"] {
+	flex: 1;
+	min-width: 0;
+}
+
+.canvas-kit-search-nav {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	flex-shrink: 0;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	color: var(--text-muted);
+}
+
+.canvas-kit-search-nav:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.canvas-kit-search-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 8px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.canvas-kit-search-toggle {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	cursor: pointer;
+}
+
+.canvas-kit-search-status {
+	margin-top: 6px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.canvas-kit-search-status:empty {
+	display: none;
+}
+
+/* Freeform-style spotlight: dim everything except the hits. */
+
+.canvas-kit-search-dim .canvas-node:not(.canvas-kit-search-hit) {
+	opacity: 0.18;
+	transition: opacity 0.15s ease;
+}
+
+.canvas-kit-search-dim .canvas-node.canvas-kit-search-hit {
+	opacity: 1;
+	transition: opacity 0.15s ease;
+}
+
+.canvas-kit-search-dim .canvas-node.canvas-kit-search-current .canvas-node-container {
+	box-shadow:
+		0 0 0 3px var(--interactive-accent),
+		0 0 24px hsla(var(--interactive-accent-hsl), 0.55);
+	border-radius: var(--radius-m);
+}
