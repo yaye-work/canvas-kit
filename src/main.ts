@@ -802,16 +802,23 @@ class CanvasToolbar {
 		});
 	}
 
-	/** Scale the toolbar + sub-bar per the user's setting (anchored top-center). */
+	/**
+	 * Scale the toolbar + sub-bar per the user's setting. Uses CSS `zoom`, NOT
+	 * transform:scale — iOS WebKit composites transform-scaled layers from
+	 * their 1x rasterization, which blurs the icons; zoom scales the layout so
+	 * everything is painted at full resolution.
+	 */
 	applyScale() {
 		const s = this.plugin.settings.toolbarScale || 1;
-		this.barEl.setCssStyles({ transformOrigin: "top center" });
-		this.barEl.style.transform = `translateX(-50%) scale(${s})`;
+		this.barEl.style.setProperty("zoom", String(s));
+		this.barEl.style.transform = "translateX(-50%)";
 		if (this.subBarEl) {
-			this.subBarEl.setCssStyles({ transformOrigin: "top center" });
-			this.subBarEl.style.transform = `translateX(-50%) scale(${s})`;
-			// Sit just below the scaled main bar (unscaled bar height ≈ 46px).
-			this.subBarEl.style.top = `${16 + Math.round(46 * s) + 10}px`;
+			this.subBarEl.style.setProperty("zoom", String(s));
+			this.subBarEl.style.transform = "translateX(-50%)";
+			// Sit just below the zoomed main bar (unscaled bar height ≈ 46px).
+			// zoom multiplies the element's own top too: visual top = top × s.
+			// Target visual = 16s (bar top) + 46s (bar height) + 10 gap.
+			this.subBarEl.style.top = `${Math.round(62 + 10 / s)}px`;
 		}
 	}
 
