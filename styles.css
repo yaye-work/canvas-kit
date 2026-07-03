@@ -1127,9 +1127,10 @@ body .canvas-wrapper .canvas-controls {
 }
 
 /* open choreography: Done morphs from the corner button; the rest slides in.
-   Fast & snappy: ~120ms with a sharp decelerating ease. */
+   Very front-loaded with a pinch of overshoot (second value > 1 swings just
+   past the resting point before settling). */
 .canvas-kit-search-done {
-	transition: transform 0.12s cubic-bezier(0.2, 0.9, 0.3, 1);
+	transition: transform 0.16s cubic-bezier(0.15, 1.25, 0.3, 1);
 }
 
 .canvas-kit-search-navgroup,
@@ -1137,7 +1138,7 @@ body .canvas-wrapper .canvas-controls {
 .canvas-kit-search-toggle {
 	transition:
 		opacity 0.1s ease-out 0.02s,
-		transform 0.12s cubic-bezier(0.2, 0.9, 0.3, 1);
+		transform 0.16s cubic-bezier(0.15, 1.25, 0.3, 1);
 }
 
 .canvas-kit-search-btn.is-hidden {
