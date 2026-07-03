@@ -80,9 +80,21 @@ interface TapePattern {
 	id: string;
 	label: string;
 	base: string | (() => string); // solid base color (function = resolved at use time)
-	swatchCss: string | (() => string);
 	/** SVG <pattern> definition; angle = tape rotation in degrees. */
 	defs: (pid: string, angle: number) => string;
+}
+
+/** Swatch background built from the pattern's OWN base + defs, so the sub-bar
+ * icon is always pixel-identical to what the tape will actually look like. */
+function tapeSwatchCss(p: TapePattern): string {
+	const base = typeof p.base === "function" ? p.base() : p.base;
+	const svg =
+		`<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22">` +
+		`<defs>${p.defs("sw", 0)}</defs>` +
+		`<rect width="22" height="22" fill="${base}"/>` +
+		`<rect width="22" height="22" fill="url(#sw)"/>` +
+		`</svg>`;
+	return `background-image:url("data:image/svg+xml,${encodeURIComponent(svg)}");background-size:cover;`;
 }
 
 /** Obsidian's accent color as h/s/l (from --interactive-accent-hsl, "254deg, 80%, 68%"-ish). */
@@ -109,8 +121,6 @@ const TAPE_PATTERNS: TapePattern[] = [
 		id: "grid",
 		label: "Grid",
 		base: tapeAccentBase,
-		swatchCss: () =>
-			`background-color:${tapeAccentBase()};background-image:linear-gradient(${tapeAccentLine()} 1px,transparent 1px),linear-gradient(90deg,${tapeAccentLine()} 1px,transparent 1px);background-size:5px 5px;`,
 		defs: (pid, angle) =>
 			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><path d="M16 0H0V16" fill="none" stroke="${tapeAccentLine()}" stroke-width="1.5"/></pattern>`,
 	},
@@ -118,8 +128,6 @@ const TAPE_PATTERNS: TapePattern[] = [
 		id: "dots",
 		label: "Dots",
 		base: "#fdf3e7",
-		swatchCss:
-			"background-color:#fdf3e7;background-image:radial-gradient(#e0626a 1.5px,transparent 1.7px);background-size:6px 6px;",
 		defs: (pid, angle) =>
 			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><circle cx="8" cy="8" r="3" fill="#e0626a"/></pattern>`,
 	},
@@ -127,8 +135,6 @@ const TAPE_PATTERNS: TapePattern[] = [
 		id: "checker",
 		label: "Checker",
 		base: "#ffffff",
-		swatchCss:
-			"background:conic-gradient(#4f9ddb 25%,#ffffff 25% 50%,#4f9ddb 50% 75%,#ffffff 75%);background-size:8px 8px;",
 		defs: (pid, angle) =>
 			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><rect width="8" height="8" fill="#4f9ddb"/><rect x="8" y="8" width="8" height="8" fill="#4f9ddb"/></pattern>`,
 	},
@@ -136,8 +142,6 @@ const TAPE_PATTERNS: TapePattern[] = [
 		id: "stars",
 		label: "Stars",
 		base: "#2b2d52",
-		swatchCss:
-			"background-color:#2b2d52;background-image:radial-gradient(#ffffff 1px,transparent 1.2px);background-size:7px 7px;",
 		defs: (pid, angle) =>
 			`<pattern id="${pid}" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><circle cx="6" cy="6" r="2" fill="#fff"/><circle cx="18" cy="14" r="1.4" fill="#fff"/><circle cx="10" cy="20" r="1" fill="#fff"/></pattern>`,
 	},
@@ -145,8 +149,6 @@ const TAPE_PATTERNS: TapePattern[] = [
 		id: "stripes",
 		label: "Stripes",
 		base: "#f5d442",
-		swatchCss:
-			"background:repeating-linear-gradient(45deg,#f5d442 0 4px,#58b583 4px 8px);",
 		defs: (pid, angle) =>
 			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle + 45})"><rect width="8" height="16" fill="#58b583"/></pattern>`,
 	},
@@ -2003,7 +2005,7 @@ class CanvasToolbar {
 					cls: "canvas-pencil-swatch canvas-pencil-tape-swatch",
 					attr: {
 						"aria-label": p.label,
-						style: typeof p.swatchCss === "function" ? p.swatchCss() : p.swatchCss,
+						style: tapeSwatchCss(p),
 					},
 				});
 				if (this.tapePattern === p.id) sw.addClass("is-active");
@@ -2345,6 +2347,7 @@ class CanvasToolbar {
 	refreshNodeStyles() {
 		const canvas = this.view.canvas;
 		if (!canvas?.nodes) return;
+		let tableSelected = false;
 		for (const node of canvas.nodes.values()) {
 			const el = node.nodeEl;
 			if (!el) continue;
@@ -2431,6 +2434,7 @@ class CanvasToolbar {
 					}
 				}
 				this.mountTableWidget(node, el);
+				if (el.hasClass("is-focused") || el.hasClass("is-selected")) tableSelected = true;
 			} else {
 				// A plain Obsidian text card. While it's still empty, offer the
 				// [+]/embed affordance so it can become a new/existing note in place;
@@ -2450,6 +2454,9 @@ class CanvasToolbar {
 				else this.unmountCardActions(el);
 			}
 		}
+		// While a table is selected, CSS nudges Obsidian's floating node menu up
+		// so it doesn't cover the column-reorder handles above the table edge.
+		canvas.wrapperEl.toggleClass("canvas-kit-table-selected", tableSelected);
 	}
 
 	/** Snap an ink node's box back to its drawing's aspect ratio after a resize. */
@@ -3448,10 +3455,6 @@ function bboxTouchesPolygon(
 
 const TABLE_CELL_W = 140;
 const TABLE_CELL_H = 48;
-/** Blank strip above the table, inside the node, so Obsidian's floating node
- * menu (which hovers just above the node) doesn't cover the column-reorder
- * handles that sit 12px above the table's top edge. */
-const TABLE_TOP_PAD = 26;
 
 class DragCreateOverlay extends ToolOverlay {
 	private rectEl: HTMLElement;
@@ -3681,7 +3684,7 @@ class DragCreateOverlay extends ToolOverlay {
 			({ cols, rows } = tableDims(a, b));
 		} else {
 			width = cols * TABLE_CELL_W;
-			height = rows * TABLE_CELL_H + TABLE_TOP_PAD;
+			height = rows * TABLE_CELL_H;
 			x = Math.round(a.x - width / 2);
 			y = Math.round(a.y - height / 2);
 		}
@@ -3721,7 +3724,7 @@ function tableDims(
 	const height = Math.abs(b.y - a.y);
 	return {
 		cols: Math.min(10, Math.max(1, Math.round(width / TABLE_CELL_W))),
-		rows: Math.min(20, Math.max(2, Math.round((height - TABLE_TOP_PAD) / TABLE_CELL_H))),
+		rows: Math.min(20, Math.max(2, Math.round(height / TABLE_CELL_H))),
 	};
 }
 
@@ -3791,7 +3794,7 @@ class TableWidget {
 			changed = true;
 		}
 		if (this.lastSyncedH && nh && Math.abs(nh - this.lastSyncedH) > 3) {
-			const f = (nh - TABLE_TOP_PAD) / Math.max(1, sumArr(this.rowH));
+			const f = nh / Math.max(1, sumArr(this.rowH));
 			this.rowH = this.rowH.map((h) => Math.max(28, Math.round(h * f)));
 			changed = true;
 		}
@@ -3816,7 +3819,6 @@ class TableWidget {
 
 		this.content.empty();
 		const root = (this.rootEl = this.content.createDiv({ cls: "cp-table-root" }));
-		root.style.paddingTop = `${TABLE_TOP_PAD}px`;
 		// Keep canvas shortcuts/deletion away from cell typing.
 		root.addEventListener("keydown", (e) => e.stopPropagation());
 
@@ -4081,7 +4083,7 @@ class TableWidget {
 			this.colW = Array<number>(cols).fill(Math.max(50, Math.round(nw / cols)));
 		}
 		if (this.rowH.length !== rows) {
-			const nh = (this.node.height ?? rows * TABLE_CELL_H + TABLE_TOP_PAD) - TABLE_TOP_PAD;
+			const nh = this.node.height ?? rows * TABLE_CELL_H;
 			this.rowH = Array<number>(rows).fill(Math.max(28, Math.round(nh / rows)));
 		}
 	}
@@ -4107,11 +4109,11 @@ class TableWidget {
 		const th = t.offsetHeight;
 		if (this.addColEl) {
 			this.addColEl.style.left = `${tw + 6}px`;
-			this.addColEl.setCssStyles({ top: `${TABLE_TOP_PAD}px` });
+			this.addColEl.setCssStyles({ top: "0px" });
 			this.addColEl.style.height = `${th}px`;
 		}
 		if (this.addRowEl) {
-			this.addRowEl.style.top = `${TABLE_TOP_PAD + th + 6}px`;
+			this.addRowEl.style.top = `${th + 6}px`;
 			this.addRowEl.setCssStyles({ left: "0px" });
 			this.addRowEl.style.width = `${tw}px`;
 		}
@@ -4120,14 +4122,13 @@ class TableWidget {
 			const cell = first?.cells[i];
 			if (cell) {
 				h.style.left = `${cell.offsetLeft + cell.offsetWidth / 2}px`;
-				h.style.top = `${TABLE_TOP_PAD - 12}px`;
 			}
 		});
 		this.colDividers.forEach((d, i) => {
 			const cell = first?.cells[i];
 			if (cell) {
 				d.style.left = `${cell.offsetLeft + cell.offsetWidth - 3}px`;
-				d.setCssStyles({ top: `${TABLE_TOP_PAD}px` });
+				d.setCssStyles({ top: "0px" });
 				d.style.height = `${th}px`;
 			}
 		});
@@ -4149,7 +4150,7 @@ class TableWidget {
 			const cell = first?.cells[i];
 			if (cell) {
 				d.style.left = `${cell.offsetLeft + cell.offsetWidth}px`;
-				d.setCssStyles({ top: `${TABLE_TOP_PAD - 12}px` });
+				d.setCssStyles({ top: "-12px" });
 			}
 		});
 		this.insertRowDots.forEach((d, r) => {
@@ -4205,7 +4206,7 @@ class TableWidget {
 		const t = this.tableEl;
 		if (!t || !t.isConnected || !this.node.getData || !this.node.setData) return;
 		const w = t.offsetWidth;
-		const h = t.offsetHeight && t.offsetHeight + TABLE_TOP_PAD;
+		const h = t.offsetHeight;
 		if (!w || !h) return;
 		this.lastSyncedW = w;
 		this.lastSyncedH = h;

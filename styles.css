@@ -1,3 +1,10 @@
+/* While a Canvas Kit table is selected, nudge Obsidian's floating node menu up
+   so it clears the column-reorder handles that sit just above the table edge.
+   (`translate` composes with the menu's own inline transform positioning.) */
+.canvas-kit-table-selected .canvas-menu {
+	translate: 0 -30px;
+}
+
 /* Optional (setting): hide Obsidian's bottom add-to-canvas bar. */
 body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	display: none;
