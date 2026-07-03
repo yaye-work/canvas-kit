@@ -1379,7 +1379,7 @@ class CanvasToolbar {
 			// Track geometry per design: 8px left/right padding, 5px top/bottom;
 			// bar centers span the padded content box, chip shares the same axis.
 			const TRACK_W = 156;
-			const PAD = 14;
+			const PAD = 12;
 			const BAR_W = 4;
 			const first = PAD + BAR_W / 2;
 			const span = TRACK_W - 2 * PAD - BAR_W;
