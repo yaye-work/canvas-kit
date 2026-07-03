@@ -1222,7 +1222,7 @@ body .canvas-wrapper .canvas-controls {
 	justify-content: center;
 	width: 44px;
 	height: 33px; /* match the Done button and the rest of the expanded bar */
-	border-radius: 5px;
+	border-radius: 8px; /* rounded square */
 	cursor: pointer;
 	color: var(--text-on-accent);
 	background: var(--interactive-accent);
@@ -1267,7 +1267,7 @@ body .canvas-wrapper .canvas-controls {
 .canvas-kit-search-row {
 	display: flex;
 	align-items: stretch;
-	gap: 8px;
+	gap: 6px;
 }
 
 /* chevron pair share one card (radius 5, height 33 — per design) */
@@ -1301,12 +1301,12 @@ body .canvas-wrapper .canvas-controls {
 	color: var(--text-normal);
 }
 
-/* the field: full pill, icon + input + count (per design) */
+/* the field: full pill, icon + input + count (per design — roomy) */
 .canvas-kit-search-field {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	padding: 0 16px;
+	gap: 12px;
+	padding: 0 18px;
 	height: 33px;
 	border-radius: 999px;
 	background: rgba(0, 0, 0, 0.05);
@@ -1320,12 +1320,12 @@ body .canvas-wrapper .canvas-controls {
 	display: flex;
 	align-items: center;
 	color: var(--text-muted);
-	--icon-size: 15px;
+	--icon-size: 16px;
 }
 
 .canvas-kit-search-field input[type="text"] {
 	flex: 1;
-	width: 220px;
+	width: 240px;
 	min-width: 0;
 	border: none;
 	background: transparent;
