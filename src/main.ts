@@ -32,7 +32,7 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	tapeImage: null,
 	textSize: 20,
 	hideBottomBar: true,
-	toolbarScale: 1.5,
+	toolbarScale: 1.25,
 	myscriptAppKey: "",
 	myscriptHmacKey: "",
 	recognitionLang: "en_US",
