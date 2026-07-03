@@ -598,7 +598,7 @@ const ICON2_SECTION =
 
 const TOOLS: { id: ToolId; icon: string; label: string; key: string; svg?: string; sep?: boolean }[] = [
 	{ id: "select", icon: "mouse-pointer-2", label: "Select (V or Esc)", key: "v", svg: ICON2_SELECT },
-	{ id: "marquee", icon: "box-select", label: "Select area — drag to select (S)", key: "s", svg: ICON2_MARQUEE },
+	{ id: "marquee", icon: "box-select", label: "Select area — drag to select (S)", key: "s", svg: ICON_LASSO },
 	{ id: "marker", icon: "pencil", label: "Marker (M)", key: "m", svg: ICON2_MARKER, sep: true },
 	{ id: "highlight", icon: "highlighter", label: "Highlighter (H)", key: "h", svg: ICON2_HIGHLIGHTER },
 	{ id: "tape", icon: "rectangle-horizontal", label: "Washi tape — drag a strip (W)", key: "w", svg: ICON2_TAPE },
@@ -626,7 +626,7 @@ const CARD_MODES: { id: CardMode; icon: string; label: string; svg?: string }[] 
 class CanvasToolbar {
 	tool: ToolId = "select";
 	markerMode: MarkerMode = "draw";
-	marqueeMode: "rect" | "lasso" = "rect";
+	marqueeMode: "rect" | "lasso" = "lasso";
 	cardMode: CardMode = "empty";
 	/** Flow A: the note chosen in "Existing note" mode, waiting to be placed by a drag. */
 	pendingExistingFile: TFile | null = null;
@@ -1455,8 +1455,8 @@ class CanvasToolbar {
 		sub.addEventListener("pointerenter", () => this.overlay?.hideHint());
 		const modes = sub.createDiv({ cls: "canvas-pencil-section canvas-pencil-island" });
 		const defs: { id: "rect" | "lasso"; label: string; svg: string }[] = [
-			{ id: "rect", label: "Rectangle select", svg: ICON2_MARQUEE },
 			{ id: "lasso", label: "Freehand select", svg: ICON_LASSO },
+			{ id: "rect", label: "Rectangle select", svg: ICON_MARQUEE_RECT },
 		];
 		for (const m of defs) {
 			const btn = modes.createDiv({
@@ -1479,7 +1479,7 @@ class CanvasToolbar {
 	/** Reflect the remembered marquee mode on the main toolbar button. */
 	private updateMarqueeIcon() {
 		const btn = this.buttons.get("marquee");
-		if (btn) setSvg(btn, this.marqueeMode === "lasso" ? ICON_LASSO : ICON2_MARQUEE);
+		if (btn) setSvg(btn, this.marqueeMode === "lasso" ? ICON_LASSO : ICON_MARQUEE_RECT);
 	}
 
 	// --- card sub toolbar: [empty | new note | existing note] ---
