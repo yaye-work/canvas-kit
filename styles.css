@@ -1137,7 +1137,8 @@ body .canvas-wrapper .canvas-controls {
 	flex: 1;
 	width: 240px;
 	min-width: 0;
-	padding: 8px 12px;
+	padding: 8px 16px;
+	border-radius: 999px; /* pill, matching the mobile look everywhere */
 }
 
 .canvas-kit-search-nav {
@@ -1211,7 +1212,17 @@ body .canvas-wrapper .canvas-controls {
 
 .canvas-kit-search-done {
 	flex-shrink: 0;
-	padding: 8px 16px;
+	padding: 8px 18px;
 	font-size: var(--font-ui-small);
 	cursor: pointer;
+	border-radius: 999px; /* pill, matching the mobile look everywhere */
+	box-shadow: none;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+}
+
+.canvas-kit-search-done:hover {
+	background: var(--interactive-accent-hover);
+	box-shadow: none;
 }

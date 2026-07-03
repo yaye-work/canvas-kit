@@ -747,8 +747,13 @@ class CanvasToolbar {
 		// [Done] [input] [count] [up] [down] [sections toggle]
 		const panel = (this.searchPanelEl = wrap.createDiv({ cls: "canvas-kit-search-panel" }));
 
-		const done = panel.createEl("button", { cls: "canvas-kit-search-done", text: "Done" });
-		done.addEventListener("click", () => this.closeSearch());
+		const toggle = panel.createEl("label", {
+			cls: "canvas-kit-search-toggle",
+			attr: { "aria-label": "Match section names only" },
+		});
+		const box = toggle.createEl("input", { type: "checkbox" });
+		box.checked = this.searchSectionsOnly;
+		toggle.appendText(" Sections");
 
 		const input = (this.searchInputEl = panel.createEl("input", {
 			type: "text",
@@ -766,13 +771,8 @@ class CanvasToolbar {
 		});
 		setIcon(next, "chevron-down");
 
-		const toggle = panel.createEl("label", {
-			cls: "canvas-kit-search-toggle",
-			attr: { "aria-label": "Match section names only" },
-		});
-		const box = toggle.createEl("input", { type: "checkbox" });
-		box.checked = this.searchSectionsOnly;
-		toggle.appendText(" Sections");
+		const done = panel.createEl("button", { cls: "canvas-kit-search-done", text: "Done" });
+		done.addEventListener("click", () => this.closeSearch());
 		this.searchStatusEl = panel.createDiv({ cls: "canvas-kit-search-status" });
 
 		const rerun = () => this.runSearch(input.value);
