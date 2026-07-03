@@ -290,6 +290,14 @@ interface CanvasLike {
 	requestSave?: () => void;
 	deselectAll?: () => void;
 	selection?: Set<CanvasNodeLike>;
+	// Viewport + history internals (used for touch pan/zoom and gesture undo).
+	panBy?: (dx: number, dy: number) => void;
+	markViewportChanged?: () => void;
+	zoom?: number;
+	tZoom?: number;
+	scale?: number;
+	undo?: () => void;
+	redo?: () => void;
 }
 
 /** True for nodes created by the marker/highlighter/tape tools. */
@@ -2057,6 +2065,12 @@ abstract class ToolOverlay {
 	protected destroyed = false;
 	private touchPts = new Map<number, { x: number; y: number }>();
 	private gestureActive = false;
+	private gestureStartTime = 0;
+	private gestureMoved = false;
+	private gestureMaxTouches = 0;
+	private gestureStartPos = new Map<number, { x: number; y: number }>();
+	private lastMultiTapTime = 0;
+	private lastMultiTapCount = 0;
 
 	constructor(protected tb: CanvasToolbar, cls: string) {
 		this.el = tb.view.canvas!.wrapperEl.createDiv({ cls: `canvas-pencil-overlay ${cls}` });
@@ -2089,13 +2103,26 @@ abstract class ToolOverlay {
 			this.touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
 			if (this.touchPts.size === 2 && !this.gestureActive) {
 				this.gestureActive = true;
+				this.gestureStartTime = Date.now();
+				this.gestureMoved = false;
+				this.gestureMaxTouches = 2;
+				this.gestureStartPos = new Map(this.touchPts);
 				this.onGestureStart();
+			} else if (this.gestureActive) {
+				this.gestureMaxTouches = Math.max(this.gestureMaxTouches, this.touchPts.size);
+				this.gestureStartPos.set(e.pointerId, { x: e.clientX, y: e.clientY });
 			}
 		};
 		const move = (e: PointerEvent) => {
 			if (e.pointerType !== "touch") return;
 			const prev = this.touchPts.get(e.pointerId);
 			if (!prev) return;
+			if (this.gestureActive && !this.gestureMoved) {
+				const start = this.gestureStartPos.get(e.pointerId);
+				if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12) {
+					this.gestureMoved = true;
+				}
+			}
 			if (!this.gestureActive || this.touchPts.size !== 2) {
 				this.touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
 				return;
@@ -2116,7 +2143,10 @@ abstract class ToolOverlay {
 		const up = (e: PointerEvent) => {
 			if (e.pointerType !== "touch") return;
 			this.touchPts.delete(e.pointerId);
-			if (this.touchPts.size < 2) this.gestureActive = false;
+			if (this.touchPts.size < 2 && this.gestureActive) {
+				this.gestureActive = false;
+				this.onGestureEnd();
+			}
 		};
 		this.el.addEventListener("pointerdown", down, true);
 		this.el.addEventListener("pointermove", move, true);
@@ -2124,9 +2154,58 @@ abstract class ToolOverlay {
 		this.el.addEventListener("pointercancel", up, true);
 	}
 
-	/** Drive Obsidian's own wheel handlers: plain wheel pans, ctrl+wheel zooms —
-	 *  no reliance on undocumented viewport internals. */
+	/**
+	 * A multi-finger gesture that never moved and ended fast is a TAP. Two
+	 * two-finger taps in quick succession undo (Procreate-style); with three
+	 * fingers they redo.
+	 */
+	private onGestureEnd() {
+		const quick = Date.now() - this.gestureStartTime < 300;
+		if (!quick || this.gestureMoved) {
+			this.lastMultiTapTime = 0;
+			return;
+		}
+		const count = this.gestureMaxTouches;
+		const now = Date.now();
+		if (now - this.lastMultiTapTime < 450 && this.lastMultiTapCount === count) {
+			this.lastMultiTapTime = 0;
+			try {
+				if (count >= 3) this.canvas.redo?.();
+				else this.canvas.undo?.();
+			} catch (err) {
+				console.warn("Canvas Kit: gesture undo failed", err);
+			}
+		} else {
+			this.lastMultiTapTime = now;
+			this.lastMultiTapCount = count;
+		}
+	}
+
+	/**
+	 * Pan/zoom the canvas viewport directly (panBy + zoom internals) — synthetic
+	 * wheel events don't drive the canvas on mobile. Zoom is anchored to the
+	 * pinch midpoint: the world point under the OLD midpoint is put back under
+	 * the NEW midpoint after rescaling. Falls back to wheel synthesis if the
+	 * internals ever change shape.
+	 */
 	private applyPanZoom(dx: number, dy: number, ratio: number, cx: number, cy: number) {
+		const c = this.canvas;
+		if (
+			typeof c.panBy === "function" &&
+			typeof c.posFromEvt === "function" &&
+			typeof c.scale === "number"
+		) {
+			const before = c.posFromEvt({ clientX: cx - dx, clientY: cy - dy });
+			if (ratio !== 1 && typeof c.markViewportChanged === "function") {
+				const zoom = Math.max(-4, Math.min(1, Math.log2(c.scale * ratio)));
+				c.zoom = c.tZoom = zoom;
+				c.scale = Math.pow(2, zoom);
+				c.markViewportChanged();
+			}
+			const after = c.posFromEvt({ clientX: cx, clientY: cy });
+			c.panBy(before.x - after.x, before.y - after.y);
+			return;
+		}
 		const wrap = this.canvas.wrapperEl;
 		const target = wrap.querySelector(".canvas") ?? wrap;
 		if (dx || dy) {
