@@ -743,6 +743,10 @@ class CanvasToolbar {
 
 	private openSearchPanel() {
 		const wrap = this.view.canvas!.wrapperEl;
+		// Capture the corner button's position BEFORE hiding it — the Done
+		// button morphs out of it (same color, sliding to center, per the spec).
+		const btnRect = this.searchBtnEl?.getBoundingClientRect() ?? null;
+		this.searchBtnEl?.addClass("is-hidden");
 		// Per the Figma spec: a "Section Only" checkbox floats above the bar;
 		// the bar itself is [chevron pill: up down] [icon + input + count] [Done].
 		const panel = (this.searchPanelEl = wrap.createDiv({ cls: "canvas-kit-search-panel" }));
@@ -781,6 +785,30 @@ class CanvasToolbar {
 		const done = bar.createEl("button", { cls: "canvas-kit-search-done", text: "Done" });
 		done.addEventListener("click", () => this.closeSearch());
 		this.searchStatusEl = panel.createDiv({ cls: "canvas-kit-search-status" });
+
+		// Choreography: Done starts AT the corner button (it "is" the button),
+		// everything else starts transparent and slightly right; one frame later
+		// all transition to their resting spots.
+		const fadeEls = [toggle, navGroup, field];
+		for (const el of fadeEls) {
+			el.style.opacity = "0";
+			el.style.transform = "translateX(24px)";
+		}
+		if (btnRect) {
+			const dr = done.getBoundingClientRect(); // forces layout, pre-paint
+			done.style.transform = `translate(${
+				btnRect.left + btnRect.width / 2 - (dr.left + dr.width / 2)
+			}px, ${btnRect.top + btnRect.height / 2 - (dr.top + dr.height / 2)}px)`;
+		}
+		window.requestAnimationFrame(() => {
+			window.requestAnimationFrame(() => {
+				done.style.transform = "";
+				for (const el of fadeEls) {
+					el.style.opacity = "1";
+					el.style.transform = "";
+				}
+			});
+		});
 
 		const rerun = () => this.runSearch(input.value);
 		input.addEventListener("input", () => {
@@ -848,6 +876,7 @@ class CanvasToolbar {
 	}
 
 	private closeSearch() {
+		this.searchBtnEl?.removeClass("is-hidden");
 		if (this.searchOutside) {
 			this.doc.removeEventListener("pointerdown", this.searchOutside, true);
 			this.searchOutside = null;
@@ -1125,14 +1154,22 @@ class CanvasToolbar {
 	}
 
 	/**
-	 * Anchor the sub-bar under ITS tool's button instead of screen-center —
-	 * proximity keeps the mode options visually attached to what was tapped.
-	 * Clamped to the viewport so it never hangs off an edge.
+	 * Compact mode pickers (marquee, card) anchor under their tool's button —
+	 * proximity keeps the options attached to what was tapped. The long draw
+	 * sub-bars (size + palette) stay screen-centered; their buttons are near
+	 * the middle anyway. Clamped so nothing hangs off an edge.
+	 *
+	 * Positioning is measure-and-correct: engines disagree on whether CSS zoom
+	 * scales the element's own `left` (Chromium does, iOS WebKit doesn't), so
+	 * we set, measure the real center, and nudge until it lands.
 	 */
 	private positionSubBar() {
 		const sub = this.subBarEl;
 		if (!sub) return;
-		const s = this.plugin.settings.toolbarScale || 1;
+		if (this.tool !== "marquee" && this.tool !== "card") {
+			sub.style.left = "50%";
+			return;
+		}
 		const btn = this.buttons.get(this.tool);
 		const wrap = this.view.canvas!.wrapperEl;
 		if (!btn) {
@@ -1141,11 +1178,16 @@ class CanvasToolbar {
 		}
 		const br = btn.getBoundingClientRect();
 		const wr = wrap.getBoundingClientRect();
-		let cx = br.left + br.width / 2 - wr.left; // visual px within the wrapper
+		let cx = br.left + br.width / 2 - wr.left; // target visual center
 		const half = sub.getBoundingClientRect().width / 2;
 		cx = Math.max(half + 8, Math.min(wr.width - half - 8, cx));
-		// zoom multiplies the element's own left — divide it back out.
-		sub.style.left = `${Math.round(cx / s)}px`;
+		sub.style.left = `${cx}px`;
+		for (let i = 0; i < 3; i++) {
+			const r = sub.getBoundingClientRect();
+			const err = wr.left + cx - (r.left + r.width / 2);
+			if (Math.abs(err) < 1) break;
+			sub.style.left = `${parseFloat(sub.style.left) + err}px`;
+		}
 	}
 
 	setTool(tool: ToolId) {

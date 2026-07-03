@@ -1125,18 +1125,23 @@ body .canvas-wrapper .canvas-controls {
 	align-items: flex-start;
 	gap: 6px;
 	max-width: 92vw;
-	animation: canvas-kit-search-in 0.18s ease-out;
 }
 
-@keyframes canvas-kit-search-in {
-	from {
-		opacity: 0;
-		transform: translateX(-50%) translateY(10px);
-	}
-	to {
-		opacity: 1;
-		transform: translateX(-50%) translateY(0);
-	}
+/* open choreography: Done morphs from the corner button; the rest slides in */
+.canvas-kit-search-done {
+	transition: transform 0.22s ease;
+}
+
+.canvas-kit-search-navgroup,
+.canvas-kit-search-field,
+.canvas-kit-search-toggle {
+	transition:
+		opacity 0.18s ease 0.05s,
+		transform 0.22s ease;
+}
+
+.canvas-kit-search-btn.is-hidden {
+	display: none;
 }
 
 .canvas-kit-search-row {
