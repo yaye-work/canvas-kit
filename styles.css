@@ -141,29 +141,16 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	box-sizing: border-box;
 }
 
-/* Current color: ring + dot indicator (per design) */
-.canvas-pencil-color-current {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 17px;
-	height: 17px;
-	border-radius: 50%;
-	border: 1.4px solid var(--text-normal);
-	box-sizing: border-box;
+
+.canvas-pencil-swatch.is-active {
+	outline: 1.4px solid currentColor; /* ring in the swatch's own color */
+	outline-offset: 2px;
 }
 
-.canvas-pencil-color-current-dot {
-	width: 11px;
-	height: 11px;
-	border-radius: 50%;
-	background: var(--text-normal);
-}
-
-.canvas-pencil-swatch.is-active,
 .canvas-pencil-wheel.is-active,
 .canvas-pencil-tape-custom.is-active {
-	box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--interactive-accent);
+	outline: 1.4px solid var(--text-normal);
+	outline-offset: 2px;
 }
 
 /* color wheel (custom color) */
@@ -1115,56 +1102,61 @@ body .canvas-wrapper .canvas-controls {
 	gap: 6px;
 }
 
-/* Preset bars island (per design: 7 vertical pills; active gets a white chip) */
+/* Preset bars island: 6 evenly spaced pills with a REAL slider on top.
+   The track is invisible; the thumb is the white chip from the design. */
 .canvas-pencil-size-slider {
 	position: relative;
 	width: 156px;
 	height: 26px;
 }
 
-.canvas-pencil-size-tick-hit {
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	width: 18px;
-	transform: translateX(-50%);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-}
-
 .canvas-pencil-size-tick {
+	position: absolute;
+	top: 50%;
 	width: 4px;
 	height: 16px;
 	border-radius: 2px;
+	transform: translate(-50%, -50%);
 	background: rgba(0, 0, 0, 0.4);
+	pointer-events: none;
 }
 
 .theme-dark .canvas-pencil-size-tick {
 	background: rgba(255, 255, 255, 0.45);
 }
 
-.canvas-pencil-size-tick-hit:hover .canvas-pencil-size-tick {
-	background: var(--text-normal);
+.canvas-pencil-size-tick.is-active {
+	background: var(--interactive-accent);
+	z-index: 2;
 }
 
-.canvas-pencil-size-tick-hit.is-active::before {
-	content: "";
+.canvas-pencil-size-slider input[type="range"] {
 	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	background: transparent;
+	background-color: transparent;
+	cursor: pointer;
+}
+
+.canvas-pencil-size-slider input[type="range"]::-webkit-slider-runnable-track {
+	background: transparent;
+	border: none;
+}
+
+.canvas-pencil-size-slider input[type="range"]::-webkit-slider-thumb {
 	width: 13px;
 	height: 22px;
 	border-radius: 3px;
 	background: rgba(255, 255, 255, 0.8);
+	border: none;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
-.theme-dark .canvas-pencil-size-tick-hit.is-active::before {
-	background: rgba(255, 255, 255, 0.18);
-}
-
-.canvas-pencil-size-tick-hit.is-active .canvas-pencil-size-tick {
-	position: relative;
-	background: var(--interactive-accent);
+.theme-dark .canvas-pencil-size-slider input[type="range"]::-webkit-slider-thumb {
+	background: rgba(255, 255, 255, 0.25);
 }
 
 /* Brush preview island */
@@ -1245,23 +1237,27 @@ body .canvas-wrapper .canvas-controls {
 	gap: 8px;
 }
 
-/* chevron pair share one pill */
+/* chevron pair share one card (radius 5, height 33 — per design) */
 .canvas-kit-search-navgroup {
 	display: flex;
 	align-items: center;
 	flex-shrink: 0;
 	padding: 0 4px;
-	border-radius: 10px;
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
+	height: 33px;
+	border-radius: 5px;
+	background: rgba(0, 0, 0, 0.05);
+}
+
+.theme-dark .canvas-kit-search-navgroup {
+	background: rgba(255, 255, 255, 0.08);
 }
 
 .canvas-kit-search-nav {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 34px;
-	height: 40px;
+	width: 28px;
+	height: 33px;
 	flex-shrink: 0;
 	border-radius: var(--radius-s);
 	cursor: pointer;
@@ -1272,16 +1268,19 @@ body .canvas-wrapper .canvas-controls {
 	color: var(--text-normal);
 }
 
-/* the field: icon + input + count in one rounded box */
+/* the field: full pill, icon + input + count (per design) */
 .canvas-kit-search-field {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding: 0 14px;
-	height: 42px;
-	border-radius: 10px;
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
+	padding: 0 16px;
+	height: 33px;
+	border-radius: 999px;
+	background: rgba(0, 0, 0, 0.05);
+}
+
+.theme-dark .canvas-kit-search-field {
+	background: rgba(255, 255, 255, 0.08);
 }
 
 .canvas-kit-search-field-icon {
@@ -1365,11 +1364,11 @@ body .canvas-wrapper .canvas-controls {
    needs no specificity at all, the built-in rule does the painting. */
 .canvas-kit-search-panel button.canvas-kit-search-done {
 	flex-shrink: 0;
-	padding: 0 18px;
-	height: auto;
+	padding: 0 14px;
+	height: 33px;
 	font-size: var(--font-ui-small);
 	cursor: pointer;
-	border-radius: 10px;
+	border-radius: 5px;
 	box-shadow: none;
 	border: none;
 	--text-color: #ffffff;

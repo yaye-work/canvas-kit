@@ -42,22 +42,15 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 // color renders as a ring indicator; anything else comes from the wheel.
 const PALETTE = ["#D4523B", "#E1C63B", "#6F9B32", "#3065C9", "#CB73C4"];
 
-// Highlighter presets: pastels (grey, pink, orange, yellow, green, cyan, purple, white).
-const HIGHLIGHT_PALETTE = [
-	"#9e9e9e",
-	"#f2a7dd",
-	"#f5b266",
-	"#f7ee7f",
-	"#b6f08c",
-	"#85efe4",
-	"#a78bfa",
-	"#ffffff",
-];
+// Highlighter presets: 5 pastels (pink, orange, yellow, green, cyan) + custom.
+const HIGHLIGHT_PALETTE = ["#f2a7dd", "#f5b266", "#f7ee7f", "#b6f08c", "#85efe4"];
 
 const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 
 // Brush-size presets shown as ticks on the stroke slider (Procreate-style).
-const STROKE_PRESETS = [2, 4, 6, 9, 13, 20, 30];
+const STROKE_PRESETS = [8, 16, 24, 32, 40, 48];
+const STROKE_MIN = 2;
+const STROKE_MAX = 48;
 
 // ---------- Tape patterns ----------
 
@@ -1359,7 +1352,8 @@ class CanvasToolbar {
 			this.sizeSectionEl = sub.createDiv({
 				cls: "canvas-pencil-section canvas-pencil-size-inline",
 			});
-			// Island 1: the 7 preset ticks (vertical bars; active gets a white chip).
+			// Island 1: a real slider layered over 6 evenly spaced preset bars —
+			// it slides continuously and snaps onto a preset when it gets close.
 			const sliderIsland = this.sizeSectionEl.createDiv({
 				cls: "canvas-pencil-island canvas-pencil-size-slider",
 			});
@@ -1369,26 +1363,39 @@ class CanvasToolbar {
 			});
 			const preview = previewIsland.createDiv({ cls: "canvas-pencil-size-preview" });
 			const tickEls = new Map<number, HTMLElement>();
+			const range = STROKE_MAX - STROKE_MIN;
 			const updatePreview = () => {
-				const d = Math.round(4 + ((this.markerSize - 2) / 28) * 12);
+				const d = Math.round(4 + ((this.markerSize - STROKE_MIN) / range) * 12);
 				preview.style.width = preview.style.height = `${d}px`;
 				for (const [p, el] of tickEls) el.toggleClass("is-active", p === this.markerSize);
 			};
 			for (const p of STROKE_PRESETS) {
-				const hit = sliderIsland.createDiv({
-					cls: "canvas-pencil-size-tick-hit",
-					attr: { "aria-label": `Size ${p}` },
-				});
-				hit.style.left = `${5 + ((p - 2) / 28) * 90}%`;
-				hit.createDiv({ cls: "canvas-pencil-size-tick" });
-				hit.addEventListener("pointerdown", (e) => {
-					e.stopPropagation();
-					e.preventDefault();
-					this.markerSize = p;
-					updatePreview();
-				});
-				tickEls.set(p, hit);
+				const tick = sliderIsland.createDiv({ cls: "canvas-pencil-size-tick" });
+				tick.style.left = `${6 + ((p - STROKE_MIN) / range) * 88}%`;
+				tickEls.set(p, tick);
 			}
+			const slider = sliderIsland.createEl("input", {
+				type: "range",
+				attr: {
+					min: String(STROKE_MIN),
+					max: String(STROKE_MAX),
+					step: "1",
+					"aria-label": "Stroke size",
+				},
+			});
+			slider.value = String(this.markerSize);
+			slider.addEventListener("input", () => {
+				let v = Number(slider.value);
+				for (const p of STROKE_PRESETS) {
+					if (Math.abs(v - p) <= 2) {
+						v = p;
+						break;
+					}
+				}
+				slider.value = String(v);
+				this.markerSize = v;
+				updatePreview();
+			});
 			updatePreview();
 		}
 
@@ -1873,29 +1880,23 @@ class CanvasToolbar {
 			this.renderCustomTapeSlot(el);
 		} else {
 			// Marker and highlighter keep separate palettes and remembered colors.
-			// Per design: [current color as a ring indicator] [preset dots] [wheel].
+			// Click to select; a ring in the swatch's own color marks the pick.
 			const highlight = this.markerMode === "highlight";
 			const palette = highlight ? HIGHLIGHT_PALETTE : PALETTE;
 			const current = highlight ? this.highlightColor : this.markerColor;
-			const indicator = el.createDiv({
-				cls: "canvas-pencil-color-current",
-				attr: { "aria-label": "Current color" },
-			});
-			const indicatorDot = indicator.createDiv({ cls: "canvas-pencil-color-current-dot" });
-			const showCurrent = (c: string) => {
-				indicator.style.borderColor = c;
-				indicatorDot.style.backgroundColor = c;
-			};
-			showCurrent(current);
 			const setColor = (c: string) => {
 				if (highlight) this.highlightColor = c;
 				else this.markerColor = c;
-				showCurrent(c);
 			};
 			for (const c of palette) {
 				const sw = el.createDiv({ cls: "canvas-pencil-swatch" });
 				sw.style.backgroundColor = c;
-				sw.addEventListener("click", () => setColor(c));
+				sw.style.color = c; // the selection ring inherits the swatch color
+				if (c.toLowerCase() === current.toLowerCase()) sw.addClass("is-active");
+				sw.addEventListener("click", () => {
+					setColor(c);
+					this.markStyleActive(el, sw);
+				});
 			}
 			const wheel = el.createDiv({
 				cls: "canvas-pencil-wheel",
@@ -1903,7 +1904,13 @@ class CanvasToolbar {
 			});
 			const picker = wheel.createEl("input", { type: "color" });
 			picker.value = /^#[0-9a-f]{6}$/i.test(current) ? current : "#1e1e1e";
-			picker.addEventListener("input", () => setColor(picker.value));
+			picker.addEventListener("input", () => {
+				setColor(picker.value);
+				this.markStyleActive(el, wheel);
+			});
+			if (!palette.some((c) => c.toLowerCase() === current.toLowerCase())) {
+				this.markStyleActive(el, wheel);
+			}
 		}
 	}
 
