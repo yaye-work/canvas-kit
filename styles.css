@@ -1153,11 +1153,15 @@ body .canvas-wrapper .canvas-controls {
 /* native thumb stays for dragging but is invisible — the chip div below is
    the visual thumb, positioned by the same math as the ticks */
 .canvas-pencil-size-slider input[type="range"]::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
 	width: 13px;
 	height: 22px;
 	background: transparent;
+	background-color: transparent;
 	border: none;
 	box-shadow: none;
+	opacity: 0; /* fully invisible — the .canvas-pencil-size-chip div is the visual thumb */
 }
 
 .canvas-pencil-size-chip {
