@@ -1220,8 +1220,8 @@ body .canvas-wrapper .canvas-controls {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 44px;
-	height: 33px; /* match the Done button and the rest of the expanded bar */
+	width: 33px; /* square — same as its height / the expanded bar */
+	height: 33px;
 	border-radius: 8px; /* rounded square */
 	cursor: pointer;
 	color: var(--text-on-accent);
