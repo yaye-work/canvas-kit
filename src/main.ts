@@ -38,9 +38,10 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	recognitionLang: "en_US",
 };
 
-// Designed preset row (Figma): red, yellow, green, blue, magenta. The current
-// color renders as a ring indicator; anything else comes from the wheel.
-const PALETTE = ["#D4523B", "#E1C63B", "#6F9B32", "#3065C9", "#CB73C4"];
+// Designed preset row (Figma): black (default), red, yellow, green, blue,
+// magenta. The selected swatch shows a ring; off-palette colors come from the
+// wheel. Black matches the default marker color so a fresh marker rings black.
+const PALETTE = ["#1e1e1e", "#D4523B", "#E1C63B", "#6F9B32", "#3065C9", "#CB73C4"];
 
 // Highlighter presets: 5 pastels (pink, orange, yellow, green, cyan) + custom.
 const HIGHLIGHT_PALETTE = ["#f2a7dd", "#f5b266", "#f7ee7f", "#b6f08c", "#85efe4"];
