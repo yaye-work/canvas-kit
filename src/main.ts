@@ -272,7 +272,7 @@ type Point = [number, number, number];
 // ---------- QuickShape (Procreate-style): hold still at stroke end → snap ----------
 
 /** How long the pen must sit still (ms) before lifting to trigger a snap. */
-const QUICKSHAPE_HOLD_MS = 280;
+const QUICKSHAPE_HOLD_MS = 150;
 /** Client-pixel wiggle allowed while "holding still" (pen jitter). */
 const QUICKSHAPE_JITTER_PX = 6;
 
@@ -290,7 +290,7 @@ const shapeSampleLine = (a: [number, number], b: [number, number], n: number): P
  * replacement points, or null when it doesn't confidently match any shape.
  * Rotation-aware: tilted rectangles and ellipses snap at their drawn angle.
  */
-function quickShapeFor(raw: Point[]): Point[] | null {
+function quickShapeFor(raw: Point[]): { pts: Point[]; closed: boolean } | null {
 	if (raw.length < 8) return null;
 	// Drop the dwell tail: points bunched where the pen sat still would skew fits.
 	const pts = raw.slice();
@@ -331,7 +331,9 @@ function quickShapeFor(raw: Point[]): Point[] | null {
 			const d = Math.abs((ey - sy) * x - (ex - sx) * y + ex * sy - ey * sx) / chord;
 			if (d > maxDev) maxDev = d;
 		}
-		if (maxDev / chord < 0.08) return shapeSampleLine([sx, sy], [ex, ey], 16);
+		if (maxDev / chord < 0.08) {
+			return { pts: shapeSampleLine([sx, sy], [ex, ey], 16), closed: false };
+		}
 		return null;
 	}
 
@@ -397,12 +399,18 @@ function quickShapeFor(raw: Point[]): Point[] | null {
 		const c2 = toWorld(bMinU + 2 * bU, bMinV);
 		const c3 = toWorld(bMinU + 2 * bU, bMinV + 2 * bV);
 		const c4 = toWorld(bMinU, bMinV + 2 * bV);
-		return [
-			...shapeSampleLine(c1, c2, n),
-			...shapeSampleLine(c2, c3, n),
-			...shapeSampleLine(c3, c4, n),
-			...shapeSampleLine(c4, c1, n),
-		];
+		// Drop each edge's duplicated endpoint (next edge starts there) and the
+		// final point (Z closes back to the start; a zero-length closing segment
+		// would spoil the miter at the first corner).
+		return {
+			pts: [
+				...shapeSampleLine(c1, c2, n).slice(0, -1),
+				...shapeSampleLine(c2, c3, n).slice(0, -1),
+				...shapeSampleLine(c3, c4, n).slice(0, -1),
+				...shapeSampleLine(c4, c1, n).slice(0, -1),
+			],
+			closed: true,
+		};
 	}
 
 	if (areaRatio > 0.65) {
@@ -422,12 +430,12 @@ function quickShapeFor(raw: Point[]): Point[] | null {
 		for (const r of rr) variance += (r - mean) * (r - mean);
 		if (Math.sqrt(variance / rr.length) / mean < 0.12) {
 			const out: Point[] = [];
-			for (let i = 0; i <= 64; i++) {
+			for (let i = 0; i < 64; i++) {
 				const t = (i / 64) * Math.PI * 2;
 				const [x, y] = toWorld(cu + a * Math.cos(t), cv + b * Math.sin(t));
 				out.push([x, y, 0.5]);
 			}
-			return out;
+			return { pts: out, closed: true };
 		}
 	}
 	return null;
@@ -438,6 +446,9 @@ interface PencilStroke {
 	color: string;
 	size: number;
 	highlight: boolean;
+	/** Set when QuickShape snapped this stroke: rendered as a crisp stroked path
+	 * (miter corners, closed loops) instead of a perfect-freehand outline. */
+	shape?: "line" | "closed";
 }
 
 interface CanvasNodeLike {
@@ -633,6 +644,9 @@ export default class CanvasPencilPlugin extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<CanvasPencilSettings>);
+		// Migration: 4 was the old default/first preset; the scale now starts at 2.
+		// Anyone still on 4 was on the default, so move them to the new first mark.
+		if (this.settings.strokeSize === 4) this.settings.strokeSize = 2;
 		setInkSmoothing(this.settings.inkSmoothing);
 	}
 
@@ -2990,7 +3004,10 @@ class MarkerOverlay extends ToolOverlay {
 		this.holdAnchor = null;
 		if (!ha || Date.now() - ha.t < QUICKSHAPE_HOLD_MS) return;
 		const snapped = quickShapeFor(stroke.worldPts);
-		if (snapped) stroke.worldPts = snapped;
+		if (snapped) {
+			stroke.worldPts = snapped.pts;
+			stroke.shape = snapped.closed ? "closed" : "line";
+		}
 	}
 
 	private commitStroke(stroke: PencilStroke) {
@@ -4697,16 +4714,22 @@ function buildStrokesSvg(strokes: PencilStroke[]): InkSvg | null {
 	};
 
 	for (const stroke of strokes) {
-		if (stroke.highlight) {
-			// Flat chisel: constant-width stroked ribbon with flat (butt) ends.
+		if (stroke.highlight || stroke.shape) {
+			// Stroked polyline: the highlighter's flat chisel ribbon, and
+			// QuickShape's crisp geometry (miter corners; Z closes the loop so
+			// rectangles get sharp angles and ellipses have no seam gap).
 			if (stroke.worldPts.length < 2) continue;
 			const half = stroke.size / 2;
 			for (const [x, y] of stroke.worldPts) { grow(x - half, y - half); grow(x + half, y + half); }
 			const d =
 				`M${r2(stroke.worldPts[0][0])} ${r2(stroke.worldPts[0][1])}` +
-				stroke.worldPts.slice(1).map(([x, y]) => `L${r2(x)} ${r2(y)}`).join("");
+				stroke.worldPts.slice(1).map(([x, y]) => `L${r2(x)} ${r2(y)}`).join("") +
+				(stroke.shape === "closed" ? "Z" : "");
+			const opacity = stroke.highlight ? ` stroke-opacity="${HIGHLIGHT_OPACITY}"` : "";
+			const cap = stroke.highlight && !stroke.shape ? "butt" : "round";
+			const join = stroke.shape ? "miter" : "round";
 			parts.push(
-				`<path d="${d}" fill="none" stroke="currentColor" stroke-width="${stroke.size}" stroke-opacity="${HIGHLIGHT_OPACITY}" stroke-linecap="butt" stroke-linejoin="round"/>`
+				`<path d="${d}" fill="none" stroke="currentColor" stroke-width="${stroke.size}"${opacity} stroke-linecap="${cap}" stroke-linejoin="${join}"/>`
 			);
 		} else {
 			const outline = getStroke(stroke.worldPts, {
