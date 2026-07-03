@@ -1126,17 +1126,18 @@ body .canvas-wrapper .canvas-controls {
 	max-width: 92vw;
 }
 
-/* open choreography: Done morphs from the corner button; the rest slides in */
+/* open choreography: Done morphs from the corner button; the rest slides in.
+   Fast & snappy: ~120ms with a sharp decelerating ease. */
 .canvas-kit-search-done {
-	transition: transform 0.22s ease;
+	transition: transform 0.12s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .canvas-kit-search-navgroup,
 .canvas-kit-search-field,
 .canvas-kit-search-toggle {
 	transition:
-		opacity 0.18s ease 0.05s,
-		transform 0.22s ease;
+		opacity 0.1s ease-out 0.02s,
+		transform 0.12s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .canvas-kit-search-btn.is-hidden {
