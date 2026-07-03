@@ -29,7 +29,7 @@ interface CanvasPencilSettings {
 
 const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	strokeColor: "#1e1e1e",
-	strokeSize: 4, // = mark 1 (first preset)
+	strokeSize: 2, // = mark 1 (first preset)
 	tapeImage: null,
 	textSize: 20,
 	hideBottomBar: true,
@@ -50,11 +50,11 @@ const HIGHLIGHT_PALETTE = ["#f2a7dd", "#f5b266", "#f7ee7f", "#b6f08c", "#85efe4"
 const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 
 // Brush-size presets shown as ticks on the stroke slider (Procreate-style).
-// Sizes are evenly spaced (8 apart) but the DESIGN places the ticks with
+// Sizes are evenly spaced (6.5 apart, rounded per mark) but the DESIGN places the ticks with
 // growing gaps. Positions are the EXACT mark centers from the design file
 // (156.306px container), expressed as fractions of the track width.
-const STROKE_PRESETS = [4, 10, 16, 22, 28];
-const STROKE_MIN = 4;
+const STROKE_PRESETS = [2, 9, 15, 22, 28];
+const STROKE_MIN = 2;
 const STROKE_MAX = 28;
 /** uniform gap between consecutive presets */
 const STROKE_STEP = (STROKE_MAX - STROKE_MIN) / (STROKE_PRESETS.length - 1);
