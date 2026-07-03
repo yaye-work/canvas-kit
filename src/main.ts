@@ -48,9 +48,16 @@ const HIGHLIGHT_PALETTE = ["#f2a7dd", "#f5b266", "#f7ee7f", "#b6f08c", "#85efe4"
 const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 
 // Brush-size presets shown as ticks on the stroke slider (Procreate-style).
+// Sizes are evenly spaced (8 apart) but the DESIGN places the ticks with
+// growing gaps: tick i sits at the triangular fraction i(i+1)/30 of the track
+// (each gap 7.9px wider than the last in the source file).
 const STROKE_PRESETS = [8, 16, 24, 32, 40, 48];
-const STROKE_MIN = 2;
+const STROKE_MIN = 8;
 const STROKE_MAX = 48;
+/** preset index (0..5, fractional between ticks) → track position 0..1 */
+const strokeIdxToT = (i: number) => (i * (i + 1)) / 30;
+/** track position 0..1 → preset index (fractional) */
+const strokeTToIdx = (t: number) => (-1 + Math.sqrt(1 + 120 * t)) / 2;
 
 // ---------- Tape patterns ----------
 
@@ -1369,31 +1376,35 @@ class CanvasToolbar {
 				preview.style.width = preview.style.height = `${d}px`;
 				for (const [p, el] of tickEls) el.toggleClass("is-active", p === this.markerSize);
 			};
-			for (const p of STROKE_PRESETS) {
-				const tick = sliderIsland.createDiv({ cls: "canvas-pencil-size-tick" });
-				tick.style.left = `${6 + ((p - STROKE_MIN) / range) * 88}%`;
-				tickEls.set(p, tick);
-			}
+			// Track geometry: the thumb (13px) travels width−13px; a tick for
+			// preset i sits at the thumb-center position for t = i(i+1)/30, so the
+			// chip lands exactly on the bar when snapped.
+			const TRACK_W = 156;
+			const THUMB_W = 13;
+			const span = TRACK_W - THUMB_W;
+			// The slider's value IS the track position (0..1000): the sizes between
+			// presets stay reachable, and snapping happens in index space.
 			const slider = sliderIsland.createEl("input", {
 				type: "range",
-				attr: {
-					min: String(STROKE_MIN),
-					max: String(STROKE_MAX),
-					step: "1",
-					"aria-label": "Stroke size",
-				},
+				attr: { min: "0", max: "1000", step: "1", "aria-label": "Stroke size" },
 			});
-			slider.value = String(this.markerSize);
+			STROKE_PRESETS.forEach((p, i) => {
+				const tick = sliderIsland.createDiv({ cls: "canvas-pencil-size-tick" });
+				tick.style.left = `${THUMB_W / 2 + strokeIdxToT(i) * span}px`;
+				tickEls.set(p, tick);
+			});
+			const size2i = (size: number) => (size - STROKE_MIN) / 8;
+			this.markerSize = Math.max(STROKE_MIN, Math.min(STROKE_MAX, this.markerSize));
+			slider.value = String(Math.round(strokeIdxToT(size2i(this.markerSize)) * 1000));
 			slider.addEventListener("input", () => {
-				let v = Number(slider.value);
-				for (const p of STROKE_PRESETS) {
-					if (Math.abs(v - p) <= 2) {
-						v = p;
-						break;
-					}
+				const t = Number(slider.value) / 1000;
+				let i = strokeTToIdx(t);
+				const nearest = Math.round(i);
+				if (Math.abs(i - nearest) <= 0.3) {
+					i = nearest; // magnetic: settle onto the preset bar
+					slider.value = String(Math.round(strokeIdxToT(nearest) * 1000));
 				}
-				slider.value = String(v);
-				this.markerSize = v;
+				this.markerSize = Math.round(STROKE_MIN + i * 8);
 				updatePreview();
 			});
 			updatePreview();
