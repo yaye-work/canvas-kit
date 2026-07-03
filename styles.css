@@ -20,7 +20,7 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	z-index: 110;
 	display: flex;
 	align-items: center;
-	gap: 0; /* groups sit flush; the alternating radii create the rhythm */
+	gap: 4px; /* between tool groups; alternating radii add the rhythm */
 	cursor: default; /* restore normal pointer over the bar, not the tool cursor */
 }
 
@@ -85,7 +85,7 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 .canvas-pencil-subbar {
 	animation: canvas-pencil-subbar-in 0.16s cubic-bezier(0.15, 1.25, 0.3, 1);
 	position: absolute;
-	top: 66px;
+	top: 64px;
 	left: 50%;
 	transform: translateX(-50%);
 	z-index: 110;

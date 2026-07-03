@@ -50,15 +50,19 @@ const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 
 // Brush-size presets shown as ticks on the stroke slider (Procreate-style).
 // Sizes are evenly spaced (8 apart) but the DESIGN places the ticks with
-// growing gaps: tick i sits at the triangular fraction i(i+1)/30 of the track
-// (each gap 7.9px wider than the last in the source file).
-const STROKE_PRESETS = [8, 16, 24, 32, 40];
+// growing gaps. Positions are the EXACT mark centers from the design file
+// (156.306px container), expressed as fractions of the track width.
+const STROKE_PRESETS = [8, 16, 24, 32, 40, 48];
 const STROKE_MIN = 8;
-const STROKE_MAX = 40;
-/** preset index (0..4, fractional between ticks) → track position 0..1 */
-const strokeIdxToT = (i: number) => (i * (i + 1)) / 20;
-/** track position 0..1 → preset index (fractional) */
-const strokeTToIdx = (t: number) => (-1 + Math.sqrt(1 + 80 * t)) / 2;
+const STROKE_MAX = 48;
+/** mark i's center as a fraction (0..1) of the track — straight from Figma */
+const STROKE_MARK_FRAC = [0.058267, 0.134164, 0.260635, 0.437665, 0.665302, 0.943534];
+/** continuous preset index i (0..N-1) → track fraction (piecewise-linear) */
+const strokeIdxToFrac = (i: number) => {
+	const lo = Math.max(0, Math.min(STROKE_MARK_FRAC.length - 1, Math.floor(i)));
+	const hi = Math.min(STROKE_MARK_FRAC.length - 1, lo + 1);
+	return STROKE_MARK_FRAC[lo] + (STROKE_MARK_FRAC[hi] - STROKE_MARK_FRAC[lo]) * (i - lo);
+};
 
 // ---------- Tape patterns ----------
 
@@ -1197,10 +1201,9 @@ class CanvasToolbar {
 		if (this.subBarEl) {
 			this.subBarEl.style.setProperty("zoom", String(s));
 			this.subBarEl.style.transform = "translateX(-50%)";
-			// Sit just below the zoomed main bar (unscaled bar height ≈ 46px).
-			// zoom multiplies the element's own top too: visual top = top × s.
-			// Target visual = 16s (bar top) + 46s (bar height) + 10 gap.
-			this.subBarEl.style.top = `${Math.round(62 + 10 / s)}px`;
+			// Sit 4px below the zoomed main bar (top 16 + height 44 = bottom 60).
+			// zoom multiplies the element's own top too, so divide the gap by s.
+			this.subBarEl.style.top = `${60 + 4 / s}px`;
 			this.positionSubBar();
 		}
 	}
@@ -1377,41 +1380,36 @@ class CanvasToolbar {
 				preview.style.width = preview.style.height = `${d}px`;
 				for (const [p, el] of tickEls) el.toggleClass("is-active", p === this.markerSize);
 			};
-			// Track geometry per design: 8px left/right padding, 5px top/bottom;
-			// bar centers span the padded content box, chip shares the same axis.
-			const TRACK_W = 156;
-			const PAD = 12;
-			const BAR_W = 4;
-			const first = PAD + BAR_W / 2;
-			const span = TRACK_W - 2 * PAD - BAR_W;
-			// The slider's value IS the track position (0..1000): the sizes between
-			// presets stay reachable, and snapping happens in index space.
+			// The slider value (0..1000) is the continuous preset index scaled up;
+			// both marks and chip position from the SAME design fractions, so the
+			// chip always lands exactly on a mark when snapped.
+			const N = STROKE_PRESETS.length;
+			const val2idx = (v: number) => (v / 1000) * (N - 1);
+			const idx2val = (i: number) => (i / (N - 1)) * 1000;
 			const slider = sliderIsland.createEl("input", {
 				type: "range",
 				attr: { min: "0", max: "1000", step: "1", "aria-label": "Stroke size" },
 			});
-			// The chip "thumb" is OUR element (the native one is invisible), placed
-			// with the exact same math as the ticks — it can't drift or misalign.
+			// The chip "thumb" is OUR element (the native one is invisible).
 			const chip = sliderIsland.createDiv({ cls: "canvas-pencil-size-chip" });
 			STROKE_PRESETS.forEach((p, i) => {
 				const tick = sliderIsland.createDiv({ cls: "canvas-pencil-size-tick" });
-				tick.style.left = `${first + strokeIdxToT(i) * span}px`;
+				tick.style.left = `${STROKE_MARK_FRAC[i] * 100}%`;
 				tickEls.set(p, tick);
 			});
 			const placeChip = () => {
-				chip.style.left = `${first + (Number(slider.value) / 1000) * span}px`;
+				chip.style.left = `${strokeIdxToFrac(val2idx(Number(slider.value))) * 100}%`;
 			};
 			const size2i = (size: number) => (size - STROKE_MIN) / 8;
 			this.markerSize = Math.max(STROKE_MIN, Math.min(STROKE_MAX, this.markerSize));
-			slider.value = String(Math.round(strokeIdxToT(size2i(this.markerSize)) * 1000));
+			slider.value = String(Math.round(idx2val(size2i(this.markerSize))));
 			placeChip();
 			slider.addEventListener("input", () => {
-				const t = Number(slider.value) / 1000;
-				let i = strokeTToIdx(t);
+				let i = val2idx(Number(slider.value));
 				const nearest = Math.round(i);
 				if (Math.abs(i - nearest) <= 0.3) {
 					i = nearest; // magnetic: settle onto the preset bar
-					slider.value = String(Math.round(strokeIdxToT(nearest) * 1000));
+					slider.value = String(Math.round(idx2val(nearest)));
 				}
 				this.markerSize = Math.round(STROKE_MIN + i * 8);
 				placeChip();
