@@ -4743,7 +4743,13 @@ function commitInkNode(tb: CanvasToolbar, ink: InkSvg | null, sources?: PencilSt
 	}
 	canvas.deselectAll?.();
 	canvas.requestSave?.();
+	// The node's element mounts async — re-run the styling sweep a few times so
+	// frameless chrome and the highlighter's blend mode apply the moment it
+	// renders, not on the next 1.2s interval sweep.
 	tb.refreshNodeStyles();
+	window.requestAnimationFrame(() => tb.refreshNodeStyles());
+	window.setTimeout(() => tb.refreshNodeStyles(), 80);
+	window.setTimeout(() => tb.refreshNodeStyles(), 250);
 }
 
 // ---------- helpers ----------
