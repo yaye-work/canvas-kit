@@ -51,13 +51,13 @@ const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 // Sizes are evenly spaced (8 apart) but the DESIGN places the ticks with
 // growing gaps: tick i sits at the triangular fraction i(i+1)/30 of the track
 // (each gap 7.9px wider than the last in the source file).
-const STROKE_PRESETS = [8, 16, 24, 32, 40, 48];
+const STROKE_PRESETS = [8, 16, 24, 32, 40];
 const STROKE_MIN = 8;
-const STROKE_MAX = 48;
-/** preset index (0..5, fractional between ticks) → track position 0..1 */
-const strokeIdxToT = (i: number) => (i * (i + 1)) / 30;
+const STROKE_MAX = 40;
+/** preset index (0..4, fractional between ticks) → track position 0..1 */
+const strokeIdxToT = (i: number) => (i * (i + 1)) / 20;
 /** track position 0..1 → preset index (fractional) */
-const strokeTToIdx = (t: number) => (-1 + Math.sqrt(1 + 120 * t)) / 2;
+const strokeTToIdx = (t: number) => (-1 + Math.sqrt(1 + 80 * t)) / 2;
 
 // ---------- Tape patterns ----------
 
@@ -1379,7 +1379,7 @@ class CanvasToolbar {
 			// Track geometry per design: 8px left/right padding, 5px top/bottom;
 			// bar centers span the padded content box, chip shares the same axis.
 			const TRACK_W = 156;
-			const PAD = 8;
+			const PAD = 14;
 			const BAR_W = 4;
 			const first = PAD + BAR_W / 2;
 			const span = TRACK_W - 2 * PAD - BAR_W;
