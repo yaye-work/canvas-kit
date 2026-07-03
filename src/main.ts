@@ -28,7 +28,7 @@ interface CanvasPencilSettings {
 
 const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	strokeColor: "#1e1e1e",
-	strokeSize: 8, // = mark 1 (first preset)
+	strokeSize: 4, // = mark 1 (first preset)
 	tapeImage: null,
 	textSize: 20,
 	hideBottomBar: true,
@@ -52,9 +52,11 @@ const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 // Sizes are evenly spaced (8 apart) but the DESIGN places the ticks with
 // growing gaps. Positions are the EXACT mark centers from the design file
 // (156.306px container), expressed as fractions of the track width.
-const STROKE_PRESETS = [8, 16, 24, 32, 40];
-const STROKE_MIN = 8;
-const STROKE_MAX = 40;
+const STROKE_PRESETS = [4, 10, 16, 22, 28];
+const STROKE_MIN = 4;
+const STROKE_MAX = 28;
+/** uniform gap between consecutive presets */
+const STROKE_STEP = (STROKE_MAX - STROKE_MIN) / (STROKE_PRESETS.length - 1);
 /** mark i's center as a fraction (0..1) of the track — 5 marks, evenly spaced
  * between the design's original first (0.058) and last (0.944) positions */
 const STROKE_MARK_FRAC = [0.058267, 0.279584, 0.500901, 0.722217, 0.943534];
@@ -691,6 +693,7 @@ class CanvasToolbar {
 			this.buttons.set(t.id, btn);
 		}
 		this.buttons.get("select")!.addClass("is-active");
+		this.updateMarqueeIcon();
 		this.applyScale();
 		// Hovering the toolbar hides the cursor-following hint so it doesn't overlap.
 		this.barEl.addEventListener("pointerenter", () => this.overlay?.hideHint());
@@ -1405,7 +1408,7 @@ class CanvasToolbar {
 			const placeChip = () => {
 				chip.style.left = `${strokeIdxToFrac(val2idx(Number(slider.value))) * 100}%`;
 			};
-			const size2i = (size: number) => (size - STROKE_MIN) / 8;
+			const size2i = (size: number) => (size - STROKE_MIN) / STROKE_STEP;
 			this.markerSize = Math.max(STROKE_MIN, Math.min(STROKE_MAX, this.markerSize));
 			slider.value = String(Math.round(idx2val(size2i(this.markerSize))));
 			placeChip();
@@ -1416,7 +1419,7 @@ class CanvasToolbar {
 					i = nearest; // magnetic: settle onto the preset bar
 					slider.value = String(Math.round(idx2val(nearest)));
 				}
-				this.markerSize = Math.round(STROKE_MIN + i * 8);
+				this.markerSize = Math.round(STROKE_MIN + i * STROKE_STEP);
 				placeChip();
 				updatePreview();
 			});
@@ -1439,26 +1442,32 @@ class CanvasToolbar {
 		}));
 		sub.addEventListener("pointerenter", () => this.overlay?.hideHint());
 		const modes = sub.createDiv({ cls: "canvas-pencil-section canvas-pencil-island" });
-		const defs: { id: "rect" | "lasso"; icon: string; label: string; svg?: string }[] = [
-			{ id: "rect", icon: "box-select", label: "Rectangle select", svg: ICON_MARQUEE_RECT },
-			{ id: "lasso", icon: "lasso", label: "Freehand select", svg: ICON_LASSO },
+		const defs: { id: "rect" | "lasso"; label: string; svg: string }[] = [
+			{ id: "rect", label: "Rectangle select", svg: ICON2_MARQUEE },
+			{ id: "lasso", label: "Freehand select", svg: ICON_LASSO },
 		];
 		for (const m of defs) {
 			const btn = modes.createDiv({
 				cls: "canvas-pencil-mode canvas-pencil-mode-btn",
 				attr: { "aria-label": m.label },
 			});
-			if (m.svg) setSvg(btn, m.svg);
-			else setIcon(btn, m.icon);
+			setSvg(btn, m.svg);
 			if (m.id === this.marqueeMode) btn.addClass("is-active");
 			btn.addEventListener("click", () => {
+				// Remember the choice on the main toolbar icon, then close the
+				// sub-bar (the marquee tool stays active).
 				this.marqueeMode = m.id;
-				modes
-					.querySelectorAll(".canvas-pencil-mode-btn")
-					.forEach((el, i) => el.toggleClass("is-active", defs[i].id === m.id));
+				this.updateMarqueeIcon();
+				this.hideSubBar();
 			});
 		}
 		this.applyScale();
+	}
+
+	/** Reflect the remembered marquee mode on the main toolbar button. */
+	private updateMarqueeIcon() {
+		const btn = this.buttons.get("marquee");
+		if (btn) setSvg(btn, this.marqueeMode === "lasso" ? ICON_LASSO : ICON2_MARQUEE);
 	}
 
 	// --- card sub toolbar: [empty | new note | existing note] ---
@@ -1892,7 +1901,7 @@ class CanvasToolbar {
 		if (this.markerMode === "tape") {
 			for (const p of TAPE_PATTERNS) {
 				const sw = el.createDiv({
-					cls: "canvas-pencil-swatch",
+					cls: "canvas-pencil-swatch canvas-pencil-tape-swatch",
 					attr: { "aria-label": p.label, style: p.swatchCss },
 				});
 				if (this.tapePattern === p.id) sw.addClass("is-active");

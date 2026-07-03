@@ -159,6 +159,17 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	outline-offset: 2px;
 }
 
+/* tape patterns need to be large enough to read the pattern */
+.canvas-pencil-tape-swatch {
+	width: 22px;
+	height: 22px;
+	border-radius: 5px;
+}
+
+.canvas-pencil-tape-swatch.is-active {
+	outline-color: var(--text-normal);
+}
+
 .canvas-pencil-wheel.is-active,
 .canvas-pencil-tape-custom.is-active {
 	outline: 1.4px solid var(--text-normal);
@@ -195,9 +206,9 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 18px;
-	height: 18px;
-	border-radius: 50%;
+	width: 22px;
+	height: 22px;
+	border-radius: 5px;
 	cursor: pointer;
 	border: 1px solid var(--background-modifier-border);
 	box-sizing: border-box;
@@ -1163,12 +1174,13 @@ body .canvas-wrapper .canvas-controls {
 }
 
 /* native thumb stays for dragging but is invisible — the chip div below is
-   the visual thumb, positioned by the same math as the ticks */
+   the visual thumb. It's much WIDER than the chip (40px) so the touch/drag
+   target is easy to grab on tablet even though the visible chip is slim. */
 .canvas-pencil-size-slider input[type="range"]::-webkit-slider-thumb {
 	-webkit-appearance: none;
 	appearance: none;
-	width: 13px;
-	height: 22px;
+	width: 40px;
+	height: 26px;
 	background: transparent;
 	background-color: transparent;
 	border: none;
