@@ -1264,20 +1264,19 @@ body .canvas-wrapper .canvas-controls {
 	border-radius: var(--radius-m);
 }
 
-.canvas-kit-search-done {
+.canvas-kit-search-panel button.canvas-kit-search-done {
 	flex-shrink: 0;
 	padding: 0 18px;
 	height: auto;
 	font-size: var(--font-ui-small);
 	cursor: pointer;
 	border-radius: 10px;
-	box-shadow: none;
-	background: var(--interactive-accent);
-	color: #ffffff;
+	box-shadow: none !important;
+	background-color: var(--interactive-accent) !important;
+	color: #ffffff !important;
 	border: none;
 }
 
-.canvas-kit-search-done:hover {
-	background: var(--interactive-accent-hover);
-	box-shadow: none;
+.canvas-kit-search-panel button.canvas-kit-search-done:hover {
+	background-color: var(--interactive-accent-hover) !important;
 }
