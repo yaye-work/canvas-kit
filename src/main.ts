@@ -743,8 +743,8 @@ class CanvasToolbar {
 
 	private openSearchPanel() {
 		const wrap = this.view.canvas!.wrapperEl;
-		// One horizontal bar, centered at the bottom:
-		// [Done] [input] [count] [up] [down] [sections toggle]
+		// Per the Figma spec: a "Section Only" checkbox floats above the bar;
+		// the bar itself is [chevron pill: up down] [icon + input + count] [Done].
 		const panel = (this.searchPanelEl = wrap.createDiv({ cls: "canvas-kit-search-panel" }));
 
 		const toggle = panel.createEl("label", {
@@ -753,25 +753,32 @@ class CanvasToolbar {
 		});
 		const box = toggle.createEl("input", { type: "checkbox" });
 		box.checked = this.searchSectionsOnly;
-		toggle.appendText(" Sections");
+		toggle.appendText(" Section Only");
 
-		const input = (this.searchInputEl = panel.createEl("input", {
-			type: "text",
-			attr: { placeholder: "Search this canvas…", spellcheck: "false" },
-		}));
-		this.searchCountEl = panel.createDiv({ cls: "canvas-kit-search-count" });
-		const prev = panel.createDiv({
+		const bar = panel.createDiv({ cls: "canvas-kit-search-row" });
+
+		const navGroup = bar.createDiv({ cls: "canvas-kit-search-navgroup" });
+		const prev = navGroup.createDiv({
 			cls: "canvas-kit-search-nav",
 			attr: { "aria-label": "Previous match" },
 		});
 		setIcon(prev, "chevron-up");
-		const next = panel.createDiv({
+		const next = navGroup.createDiv({
 			cls: "canvas-kit-search-nav",
 			attr: { "aria-label": "Next match" },
 		});
 		setIcon(next, "chevron-down");
 
-		const done = panel.createEl("button", { cls: "canvas-kit-search-done", text: "Done" });
+		const field = bar.createDiv({ cls: "canvas-kit-search-field" });
+		const fieldIcon = field.createDiv({ cls: "canvas-kit-search-field-icon" });
+		setIcon(fieldIcon, "search");
+		const input = (this.searchInputEl = field.createEl("input", {
+			type: "text",
+			attr: { placeholder: "Search on this canvas…", spellcheck: "false" },
+		}));
+		this.searchCountEl = field.createDiv({ cls: "canvas-kit-search-count" });
+
+		const done = bar.createEl("button", { cls: "canvas-kit-search-done", text: "Done" });
 		done.addEventListener("click", () => this.closeSearch());
 		this.searchStatusEl = panel.createDiv({ cls: "canvas-kit-search-status" });
 
