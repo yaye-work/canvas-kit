@@ -1113,7 +1113,32 @@ class CanvasToolbar {
 			// zoom multiplies the element's own top too: visual top = top × s.
 			// Target visual = 16s (bar top) + 46s (bar height) + 10 gap.
 			this.subBarEl.style.top = `${Math.round(62 + 10 / s)}px`;
+			this.positionSubBar();
 		}
+	}
+
+	/**
+	 * Anchor the sub-bar under ITS tool's button instead of screen-center —
+	 * proximity keeps the mode options visually attached to what was tapped.
+	 * Clamped to the viewport so it never hangs off an edge.
+	 */
+	private positionSubBar() {
+		const sub = this.subBarEl;
+		if (!sub) return;
+		const s = this.plugin.settings.toolbarScale || 1;
+		const btn = this.buttons.get(this.tool);
+		const wrap = this.view.canvas!.wrapperEl;
+		if (!btn) {
+			sub.style.left = "50%";
+			return;
+		}
+		const br = btn.getBoundingClientRect();
+		const wr = wrap.getBoundingClientRect();
+		let cx = br.left + br.width / 2 - wr.left; // visual px within the wrapper
+		const half = sub.getBoundingClientRect().width / 2;
+		cx = Math.max(half + 8, Math.min(wr.width - half - 8, cx));
+		// zoom multiplies the element's own left — divide it back out.
+		sub.style.left = `${Math.round(cx / s)}px`;
 	}
 
 	setTool(tool: ToolId) {
