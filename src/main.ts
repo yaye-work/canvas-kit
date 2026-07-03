@@ -64,6 +64,9 @@ const HIGHLIGHT_PALETTE = [
 
 const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 
+// Brush-size presets shown as ticks on the stroke slider (Procreate-style).
+const STROKE_PRESETS = [2, 4, 6, 9, 13, 20, 30];
+
 // ---------- Tape patterns ----------
 
 interface TapePattern {
@@ -1334,20 +1337,50 @@ class CanvasToolbar {
 			this.sizeSectionEl = sub.createDiv({
 				cls: "canvas-pencil-section canvas-pencil-size-inline",
 			});
-			const slider = this.sizeSectionEl.createEl("input", {
+			const sliderWrap = this.sizeSectionEl.createDiv({ cls: "canvas-pencil-size-slider" });
+			const slider = sliderWrap.createEl("input", {
 				type: "range",
 				attr: { min: "2", max: "30", step: "1", "aria-label": "Stroke size" },
 			});
 			slider.value = String(this.markerSize);
+			// Procreate-style presets: 7 tick marks on the track; clicking one (or
+			// dragging near one — magnetic) snaps the brush to that size.
+			const ticksEl = sliderWrap.createDiv({ cls: "canvas-pencil-size-ticks" });
+			const tickEls = new Map<number, HTMLElement>();
 			const preview = this.sizeSectionEl.createDiv({ cls: "canvas-pencil-size-preview" });
 			const updatePreview = () => {
 				const d = Math.max(3, Math.min(26, this.markerSize));
 				preview.style.width = preview.style.height = `${d}px`;
+				for (const [p, el] of tickEls) el.toggleClass("is-active", p === this.markerSize);
 			};
+			const setSize = (v: number) => {
+				this.markerSize = v;
+				slider.value = String(v);
+				updatePreview();
+			};
+			for (const p of STROKE_PRESETS) {
+				const tick = ticksEl.createDiv({
+					cls: "canvas-pencil-size-tick",
+					attr: { "aria-label": `Size ${p}` },
+				});
+				tick.style.left = `${((p - 2) / 28) * 100}%`;
+				tick.addEventListener("pointerdown", (e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					setSize(p);
+				});
+				tickEls.set(p, tick);
+			}
 			updatePreview();
 			slider.addEventListener("input", () => {
-				this.markerSize = Number(slider.value);
-				updatePreview();
+				let v = Number(slider.value);
+				for (const p of STROKE_PRESETS) {
+					if (Math.abs(v - p) <= 1) {
+						v = p;
+						break;
+					}
+				}
+				setSize(v);
 			});
 			sub.createDiv({ cls: "canvas-pencil-divider" });
 		}
