@@ -237,8 +237,8 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 24px;
-	height: 24px;
+	width: 36px;
+	height: 36px;
 	border-radius: var(--radius-s);
 	cursor: pointer;
 	color: var(--text-muted);
@@ -250,8 +250,8 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 }
 
 .canvas-pencil-card-action svg {
-	width: 16px;
-	height: 16px;
+	width: 24px;
+	height: 24px;
 }
 
 /* ---- inline note picker, anchored to a card ---- */

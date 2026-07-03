@@ -32,7 +32,7 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	tapeImage: null,
 	textSize: 20,
 	hideBottomBar: false,
-	toolbarScale: 2,
+	toolbarScale: 1.5,
 	myscriptAppKey: "",
 	myscriptHmacKey: "",
 	recognitionLang: "en_US",
@@ -525,8 +525,10 @@ const svgToCursor = (
 	size: number,
 	rotate = 0
 ): string => {
+	// Rasterized at 2x and declared as a 2x image so the cursor stays crisp on
+	// retina displays (plain url() SVG cursors are rasterized at 1x → blurry).
 	let cur = svgString
-		.replace('class="svg-icon"', `width="${size}" height="${size}"`)
+		.replace('class="svg-icon"', `width="${size * 2}" height="${size * 2}"`)
 		.replace(
 			'fill="currentColor"',
 			'fill="#202020" stroke="#ffffff" stroke-width="1.1" paint-order="stroke" stroke-linejoin="round"'
@@ -534,7 +536,8 @@ const svgToCursor = (
 	if (rotate) cur = cur.replace("<path ", `<path transform="rotate(${rotate} 12 12)" `);
 	const hx = Math.round((hotVBx / 24) * size);
 	const hy = Math.round((hotVBy / 24) * size);
-	return `url("data:image/svg+xml;utf8,${encodeURIComponent(cur)}") ${hx} ${hy}, auto`;
+	const url = `url("data:image/svg+xml;utf8,${encodeURIComponent(cur)}")`;
+	return `-webkit-image-set(${url} 2x) ${hx} ${hy}, auto`;
 };
 
 // Designed toolbar icons (thin, filled, inherit currentColor). SVGO-optimized (p2). Frame uses Section.svg.
