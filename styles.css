@@ -1112,11 +1112,11 @@ body .canvas-wrapper .canvas-controls {
 
 .canvas-pencil-size-tick {
 	position: absolute;
-	top: 50%;
+	top: 5px; /* 26px island − 5px top/bottom padding = 16px marks */
 	width: 4px;
 	height: 16px;
 	border-radius: 2px;
-	transform: translate(-50%, -50%);
+	transform: translateX(-50%);
 	background: rgba(0, 0, 0, 0.4);
 	pointer-events: none;
 }

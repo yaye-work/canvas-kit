@@ -1376,12 +1376,13 @@ class CanvasToolbar {
 				preview.style.width = preview.style.height = `${d}px`;
 				for (const [p, el] of tickEls) el.toggleClass("is-active", p === this.markerSize);
 			};
-			// Track geometry: the thumb (13px) travels width−13px; a tick for
-			// preset i sits at the thumb-center position for t = i(i+1)/30, so the
-			// chip lands exactly on the bar when snapped.
+			// Track geometry per design: 8px left/right padding, 5px top/bottom;
+			// bar centers span the padded content box, chip shares the same axis.
 			const TRACK_W = 156;
-			const THUMB_W = 13;
-			const span = TRACK_W - THUMB_W;
+			const PAD = 8;
+			const BAR_W = 4;
+			const first = PAD + BAR_W / 2;
+			const span = TRACK_W - 2 * PAD - BAR_W;
 			// The slider's value IS the track position (0..1000): the sizes between
 			// presets stay reachable, and snapping happens in index space.
 			const slider = sliderIsland.createEl("input", {
@@ -1393,11 +1394,11 @@ class CanvasToolbar {
 			const chip = sliderIsland.createDiv({ cls: "canvas-pencil-size-chip" });
 			STROKE_PRESETS.forEach((p, i) => {
 				const tick = sliderIsland.createDiv({ cls: "canvas-pencil-size-tick" });
-				tick.style.left = `${THUMB_W / 2 + strokeIdxToT(i) * span}px`;
+				tick.style.left = `${first + strokeIdxToT(i) * span}px`;
 				tickEls.set(p, tick);
 			});
 			const placeChip = () => {
-				chip.style.left = `${THUMB_W / 2 + (Number(slider.value) / 1000) * span}px`;
+				chip.style.left = `${first + (Number(slider.value) / 1000) * span}px`;
 			};
 			const size2i = (size: number) => (size - STROKE_MIN) / 8;
 			this.markerSize = Math.max(STROKE_MIN, Math.min(STROKE_MAX, this.markerSize));
