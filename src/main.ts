@@ -28,7 +28,7 @@ interface CanvasPencilSettings {
 
 const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	strokeColor: "#1e1e1e",
-	strokeSize: 6,
+	strokeSize: 8, // = mark 1 (first preset)
 	tapeImage: null,
 	textSize: 20,
 	hideBottomBar: true,
@@ -1232,17 +1232,21 @@ class CanvasToolbar {
 			sub.style.left = "50%";
 			return;
 		}
+		const s = this.plugin.settings.toolbarScale || 1;
 		const br = btn.getBoundingClientRect();
 		const wr = wrap.getBoundingClientRect();
-		let cx = br.left + br.width / 2 - wr.left; // target visual center
+		// Desired visual center of the sub-bar = the button's center.
+		let cx = br.left + br.width / 2 - wr.left;
 		const half = sub.getBoundingClientRect().width / 2;
 		cx = Math.max(half + 8, Math.min(wr.width - half - 8, cx));
-		sub.style.left = `${cx}px`;
-		for (let i = 0; i < 3; i++) {
+		// Measure-and-correct: CSS `left` is in the sub-bar's own zoomed space, so
+		// a visual error of `err` px needs a `left` change of err / s.
+		sub.style.left = `${cx / s}px`;
+		for (let i = 0; i < 4; i++) {
 			const r = sub.getBoundingClientRect();
 			const err = wr.left + cx - (r.left + r.width / 2);
-			if (Math.abs(err) < 1) break;
-			sub.style.left = `${parseFloat(sub.style.left) + err}px`;
+			if (Math.abs(err) < 0.5) break;
+			sub.style.left = `${parseFloat(sub.style.left) + err / s}px`;
 		}
 	}
 

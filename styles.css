@@ -91,7 +91,7 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	z-index: 110;
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 4px;
 	cursor: default; /* restore normal pointer over the sub-bar, not the tool cursor */
 }
 
