@@ -1309,7 +1309,7 @@ body .canvas-wrapper .canvas-controls {
 		transform: translateY(0);
 	}
 	35% {
-		transform: translateY(-5px);
+		transform: translateY(-3px);
 	}
 	100% {
 		transform: translateY(0);
