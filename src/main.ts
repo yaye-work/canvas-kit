@@ -632,7 +632,22 @@ class CanvasToolbar {
 			});
 			if (t.svg) setSvg(btn, t.svg);
 			else setIcon(btn, t.icon);
-			btn.addEventListener("click", () => this.setTool(t.id));
+			btn.addEventListener("click", () => {
+				// Little jump on every click.
+				btn.removeClass("is-jump");
+				void btn.offsetWidth; // restart the animation
+				btn.addClass("is-jump");
+				btn.addEventListener("animationend", () => btn.removeClass("is-jump"), {
+					once: true,
+				});
+				// Re-clicking the active tool toggles its sub-bar.
+				if (t.id === this.tool && t.id !== "select") {
+					if (this.subBarEl) this.hideSubBar();
+					else this.reshowSubBar();
+				} else {
+					this.setTool(t.id);
+				}
+			});
 			this.buttons.set(t.id, btn);
 		}
 		this.buttons.get("select")!.addClass("is-active");
@@ -1263,6 +1278,14 @@ class CanvasToolbar {
 
 	revertToSelect() {
 		this.setTool("select");
+	}
+
+	/** Bring back the active tool's sub-bar after a toggle-off. */
+	private reshowSubBar() {
+		const mode = DRAW_TOOL_MODE[this.tool];
+		if (mode && mode !== "erase") this.showMarkerSubBar();
+		else if (this.tool === "marquee") this.showMarqueeSubBar();
+		else if (this.tool === "card") this.showCardSubBar();
 	}
 
 

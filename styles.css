@@ -1298,3 +1298,20 @@ body .canvas-wrapper .canvas-controls {
 		transform: translateX(-50%) translateY(0);
 	}
 }
+
+/* tool button jump on click — same snappy overshoot family */
+.canvas-pencil-tool.is-jump {
+	animation: canvas-pencil-tool-jump 0.2s cubic-bezier(0.15, 1.25, 0.3, 1);
+}
+
+@keyframes canvas-pencil-tool-jump {
+	0% {
+		transform: translateY(0);
+	}
+	35% {
+		transform: translateY(-5px);
+	}
+	100% {
+		transform: translateY(0);
+	}
+}
