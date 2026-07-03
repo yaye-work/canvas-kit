@@ -1,13 +1,6 @@
 /* Optional (setting): hide Obsidian's bottom add-to-canvas bar. */
 body.canvas-kit-hide-bottom-bar .canvas-card-menu {
-	display: none !important;
-}
-
-/* While a Canvas Kit table is selected, hide Obsidian's floating node menu —
-   it sits above the node and covers the table's top column-reorder handles.
-   (.canvas-menu = the per-node popup; .canvas-card-menu is the bottom bar.) */
-.canvas-kit-table-selected .canvas-menu {
-	display: none !important;
+	display: none;
 }
 
 /* ---- main toolbar (always visible, top center) ---- */
@@ -258,8 +251,8 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 
 /* Let the affordance sit just OUTSIDE the card without being clipped. The class
    is toggled in JS (mountCardActions) to avoid :has selector invalidation cost. */
-.canvas-node.canvas-pencil-has-actions {
-	overflow: visible !important;
+body .canvas-node.canvas-pencil-has-actions {
+	overflow: visible;
 }
 
 .canvas-pencil-card-actions {
@@ -524,171 +517,171 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 
 /* ---- ink nodes: frameless, no padding, svg fills the node ---- */
 
-.canvas-node.canvas-pencil-ink .canvas-node-container {
-	border: none !important;
-	background: transparent !important;
+body .canvas-node.canvas-pencil-ink .canvas-node-container {
+	border: none;
+	background: transparent;
 }
 
 /* Recolor strokes via Obsidian's node color: the toolbar's color button sets
    --canvas-color, which we apply to the svg's currentColor (marker fill /
    highlighter stroke). Uncolored strokes keep their drawn color (inline style). */
-.canvas-node.canvas-pencil-ink[class*="mod-canvas-color"] .canvas-node-content svg,
-.canvas-node.canvas-pencil-ink[style*="--canvas-color"] .canvas-node-content svg {
-	color: rgb(var(--canvas-color)) !important;
+body .canvas-node.canvas-pencil-ink[class*="mod-canvas-color"] .canvas-node-content svg,
+body .canvas-node.canvas-pencil-ink[style*="--canvas-color"] .canvas-node-content svg {
+	color: rgb(var(--canvas-color));
 }
 
 /* hide the resting shadow but keep Obsidian's focus/selection shadow alive —
    that's what makes the resize state visible and grabbable */
-.canvas-node.canvas-pencil-ink:not(.is-focused) .canvas-node-container {
-	box-shadow: none !important;
+body .canvas-node.canvas-pencil-ink:not(.is-focused) .canvas-node-container {
+	box-shadow: none;
 }
 
-.canvas-node.canvas-pencil-ink.is-focused .canvas-node-container {
-	box-shadow: 0 0 0 2px var(--interactive-accent) !important;
+body .canvas-node.canvas-pencil-ink.is-focused .canvas-node-container {
+	box-shadow: 0 0 0 2px var(--interactive-accent);
 }
 
-.canvas-node.canvas-pencil-ink .canvas-node-content {
-	background: transparent !important;
-	padding: 0 !important;
-	overflow: visible !important;
+body .canvas-node.canvas-pencil-ink .canvas-node-content {
+	background: transparent;
+	padding: 0;
+	overflow: visible;
 }
 
-.canvas-node.canvas-pencil-ink .canvas-node-content .markdown-preview-view,
-.canvas-node.canvas-pencil-ink .canvas-node-content .markdown-embed-content {
+body .canvas-node.canvas-pencil-ink .canvas-node-content .markdown-preview-view,
+body .canvas-node.canvas-pencil-ink .canvas-node-content .markdown-embed-content {
 	padding: 0;
 	background: transparent;
 }
 
-.canvas-node.canvas-pencil-ink .canvas-node-content svg {
+body .canvas-node.canvas-pencil-ink .canvas-node-content svg {
 	display: block;
 	width: 100%;
 	height: 100%;
 }
 
 /* ---- borderless text / table nodes (no frame, no background, no padding) ----
-   !important: Obsidian (and themes) style the editing state with equal or
-   higher specificity — text must never look like a card, even while typing. */
+   The `body` prefix out-specifies Obsidian's own editing-state styles —
+   text must never look like a card, even while typing. */
 
-.canvas-node.canvas-pencil-plain .canvas-node-container {
-	border: none !important;
-	background: transparent !important;
-	box-shadow: none !important;
+body .canvas-node.canvas-pencil-plain .canvas-node-container {
+	border: none;
+	background: transparent;
+	box-shadow: none;
 }
 
-.canvas-node.canvas-pencil-plain .canvas-node-content {
-	background: transparent !important;
-	padding: 0 !important;
+body .canvas-node.canvas-pencil-plain .canvas-node-content {
+	background: transparent;
+	padding: 0;
 }
 
-.canvas-node.canvas-pencil-plain .canvas-node-content .markdown-preview-view,
-.canvas-node.canvas-pencil-plain .canvas-node-content .markdown-source-view,
-.canvas-node.canvas-pencil-plain .canvas-node-content .markdown-embed-content {
-	padding: 0 !important;
-	background: transparent !important;
+body .canvas-node.canvas-pencil-plain .canvas-node-content .markdown-preview-view,
+body .canvas-node.canvas-pencil-plain .canvas-node-content .markdown-source-view,
+body .canvas-node.canvas-pencil-plain .canvas-node-content .markdown-embed-content {
+	padding: 0;
+	background: transparent;
 }
 
-.canvas-node.canvas-pencil-plain .canvas-node-content .cm-editor,
-.canvas-node.canvas-pencil-plain .canvas-node-content .cm-scroller,
-.canvas-node.canvas-pencil-plain .canvas-node-content .cm-content,
-.canvas-node.canvas-pencil-plain .canvas-node-content .cm-line {
-	padding: 0 !important;
-	background: transparent !important;
+body .canvas-node.canvas-pencil-plain .canvas-node-content .cm-editor,
+body .canvas-node.canvas-pencil-plain .canvas-node-content .cm-scroller,
+body .canvas-node.canvas-pencil-plain .canvas-node-content .cm-content,
+body .canvas-node.canvas-pencil-plain .canvas-node-content .cm-line {
+	padding: 0;
+	background: transparent;
 }
 
 /* ---- point text: rendered markdown that hugs its glyphs ---- */
 
 /* Font size is driven by --cp-text-size (set on the node element so resizing
    scales the text uniformly). */
-.canvas-node.canvas-pencil-text {
+body .canvas-node.canvas-pencil-text {
 	--cp-text-size: 20px;
 }
 
 /* Font + size + tight line height. The preview must HUG its content, not
    stretch: Obsidian makes it a flex column that fills the node (→ trailing
    space), so force block + auto height. */
-.canvas-node.canvas-pencil-text .canvas-node-content .markdown-preview-view,
-.canvas-node.canvas-pencil-text .canvas-node-content .markdown-rendered {
-	display: block !important;
-	height: auto !important;
-	font-size: var(--cp-text-size) !important;
-	line-height: 1.2 !important;
-	font-family: var(--cp-text-font, "Helvetica Neue", Helvetica, Arial, sans-serif) !important;
-	color: var(--text-normal) !important;
+body .canvas-node.canvas-pencil-text .canvas-node-content .markdown-preview-view,
+body .canvas-node.canvas-pencil-text .canvas-node-content .markdown-rendered {
+	display: block;
+	height: auto;
+	font-size: var(--cp-text-size);
+	line-height: 1.2;
+	font-family: var(--cp-text-font, "Helvetica Neue", Helvetica, Arial, sans-serif);
+	color: var(--text-normal);
 }
 
 /* no-wrap (NOT pre): a <br> still breaks lines, but the literal newline Obsidian
    emits after each <br> collapses instead of rendering a SECOND doubled break.
    Tight line-height on every descendant kills oversized leading. */
-.canvas-node.canvas-pencil-text .markdown-preview-view,
-.canvas-node.canvas-pencil-text .markdown-preview-view * {
-	white-space: nowrap !important;
-	line-height: 1.2 !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view,
+body .canvas-node.canvas-pencil-text .markdown-preview-view * {
+	white-space: nowrap;
+	line-height: 1.2;
 }
 
 /* Strip ALL wrapper spacing — sizers, .el-* blocks, sections, paragraph
    spacing, and Obsidian's tall sizer min-height. */
-.canvas-node.canvas-pencil-text .markdown-embed-content,
-.canvas-node.canvas-pencil-text .markdown-preview-view,
-.canvas-node.canvas-pencil-text .markdown-preview-view *:not(br) {
-	margin: 0 !important;
-	padding: 0 !important;
-	min-height: 0 !important;
-	--p-spacing: 0 !important;
+body .canvas-node.canvas-pencil-text .markdown-embed-content,
+body .canvas-node.canvas-pencil-text .markdown-preview-view,
+body .canvas-node.canvas-pencil-text .markdown-preview-view *:not(br) {
+	margin: 0;
+	padding: 0;
+	min-height: 0;
+	--p-spacing: 0;
 }
 
 /* Headings scale with the node's font (--cp-text-size) instead of the theme's
    fixed --hN-size, so resizing keeps the whole block uniform AND the h1…h6
    hierarchy is preserved. Must come AFTER the strip-spacing rule above. */
-.canvas-node.canvas-pencil-text .markdown-preview-view h1 {
-	font-size: calc(var(--cp-text-size) * 2) !important;
-	font-weight: 700 !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view h1 {
+	font-size: calc(var(--cp-text-size) * 2);
+	font-weight: 700;
 }
-.canvas-node.canvas-pencil-text .markdown-preview-view h2 {
-	font-size: calc(var(--cp-text-size) * 1.6) !important;
-	font-weight: 700 !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view h2 {
+	font-size: calc(var(--cp-text-size) * 1.6);
+	font-weight: 700;
 }
-.canvas-node.canvas-pencil-text .markdown-preview-view h3 {
-	font-size: calc(var(--cp-text-size) * 1.35) !important;
-	font-weight: 700 !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view h3 {
+	font-size: calc(var(--cp-text-size) * 1.35);
+	font-weight: 700;
 }
-.canvas-node.canvas-pencil-text .markdown-preview-view h4 {
-	font-size: calc(var(--cp-text-size) * 1.15) !important;
-	font-weight: 700 !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view h4 {
+	font-size: calc(var(--cp-text-size) * 1.15);
+	font-weight: 700;
 }
-.canvas-node.canvas-pencil-text .markdown-preview-view h5 {
-	font-size: var(--cp-text-size) !important;
-	font-weight: 700 !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view h5 {
+	font-size: var(--cp-text-size);
+	font-weight: 700;
 }
-.canvas-node.canvas-pencil-text .markdown-preview-view h6 {
-	font-size: calc(var(--cp-text-size) * 0.9) !important;
-	font-weight: 700 !important;
-	color: inherit !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view h6 {
+	font-size: calc(var(--cp-text-size) * 0.9);
+	font-weight: 700;
+	color: inherit;
 }
 
 /* Lists need their marker + indent back (the strip-spacing rule zeroed padding). */
-.canvas-node.canvas-pencil-text .markdown-preview-view ul,
-.canvas-node.canvas-pencil-text .markdown-preview-view ol {
-	padding-left: 1.6em !important;
-	list-style-position: outside !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view ul,
+body .canvas-node.canvas-pencil-text .markdown-preview-view ol {
+	padding-left: 1.6em;
+	list-style-position: outside;
 }
-.canvas-node.canvas-pencil-text .markdown-preview-view ul {
-	list-style-type: disc !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view ul {
+	list-style-type: disc;
 }
-.canvas-node.canvas-pencil-text .markdown-preview-view ol {
-	list-style-type: decimal !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view ol {
+	list-style-type: decimal;
 }
 /* A small gap so the bullet/number never touches the first glyph. */
-.canvas-node.canvas-pencil-text .markdown-preview-view li {
-	padding-left: 0.25em !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view li {
+	padding-left: 0.25em;
 }
 /* Checkboxes: drop the duplicate disc marker on task items and give the
    checkbox right-margin back (the strip-spacing rule zeroed it → it overlapped
    the text). */
-.canvas-node.canvas-pencil-text .markdown-preview-view .task-list-item {
-	list-style: none !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view .task-list-item {
+	list-style: none;
 }
-.canvas-node.canvas-pencil-text .markdown-preview-view .task-list-item-checkbox {
-	margin: 0 0.45em 0 0 !important;
+body .canvas-node.canvas-pencil-text .markdown-preview-view .task-list-item-checkbox {
+	margin: 0 0.45em 0 0;
 	vertical-align: middle;
 }
 
@@ -696,66 +689,66 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
    --canvas-color on the node (via a mod-canvas-color-N class for presets, or
    inline style for custom hex), which we route onto the TEXT — the card itself
    stays transparent via .canvas-pencil-plain. */
-.canvas-node.canvas-pencil-text[class*="mod-canvas-color"] .canvas-node-content .markdown-preview-view,
-.canvas-node.canvas-pencil-text[class*="mod-canvas-color"] .canvas-node-content .markdown-rendered,
-.canvas-node.canvas-pencil-text[style*="--canvas-color"] .canvas-node-content .markdown-preview-view,
-.canvas-node.canvas-pencil-text[style*="--canvas-color"] .canvas-node-content .markdown-rendered {
-	color: rgb(var(--canvas-color)) !important;
+body .canvas-node.canvas-pencil-text[class*="mod-canvas-color"] .canvas-node-content .markdown-preview-view,
+body .canvas-node.canvas-pencil-text[class*="mod-canvas-color"] .canvas-node-content .markdown-rendered,
+body .canvas-node.canvas-pencil-text[style*="--canvas-color"] .canvas-node-content .markdown-preview-view,
+body .canvas-node.canvas-pencil-text[style*="--canvas-color"] .canvas-node-content .markdown-rendered {
+	color: rgb(var(--canvas-color));
 }
 
 /* Text is PURE TEXT — never a card. Kill every frame/background/shadow/outline
    in every state (rest, hover, selected, editing). Obsidian's drag-selection
    handles still appear so the node stays resizable/movable. */
-.canvas-node.canvas-pencil-text,
-.canvas-node.canvas-pencil-text:hover,
-.canvas-node.canvas-pencil-text.is-focused,
-.canvas-node.canvas-pencil-text.is-selected,
-.canvas-node.canvas-pencil-text.is-editing,
-.canvas-node.canvas-pencil-text .canvas-node-container,
-.canvas-node.canvas-pencil-text:hover .canvas-node-container,
-.canvas-node.canvas-pencil-text.is-focused .canvas-node-container,
-.canvas-node.canvas-pencil-text.is-selected .canvas-node-container,
-.canvas-node.canvas-pencil-text.is-editing .canvas-node-container,
-.canvas-node.canvas-pencil-text .canvas-node-content {
-	border: none !important;
-	outline: none !important;
-	background: transparent !important;
-	box-shadow: none !important;
-	border-radius: 0 !important; /* sharp corners in every state */
+body .canvas-node.canvas-pencil-text,
+body .canvas-node.canvas-pencil-text:hover,
+body .canvas-node.canvas-pencil-text.is-focused,
+body .canvas-node.canvas-pencil-text.is-selected,
+body .canvas-node.canvas-pencil-text.is-editing,
+body .canvas-node.canvas-pencil-text .canvas-node-container,
+body .canvas-node.canvas-pencil-text:hover .canvas-node-container,
+body .canvas-node.canvas-pencil-text.is-focused .canvas-node-container,
+body .canvas-node.canvas-pencil-text.is-selected .canvas-node-container,
+body .canvas-node.canvas-pencil-text.is-editing .canvas-node-container,
+body .canvas-node.canvas-pencil-text .canvas-node-content {
+	border: none;
+	outline: none;
+	background: transparent;
+	box-shadow: none;
+	border-radius: 0; /* sharp corners in every state */
 }
 
 /* Like Photoshop point text: the box never clips the glyphs. Text always shows
    in full even if it spills past the node's bounds. */
-.canvas-node.canvas-pencil-text,
-.canvas-node.canvas-pencil-text .canvas-node-container,
-.canvas-node.canvas-pencil-text .canvas-node-content,
-.canvas-node.canvas-pencil-text .markdown-preview-view,
-.canvas-node.canvas-pencil-text .markdown-preview-sizer {
-	overflow: visible !important;
-	contain: none !important;
+body .canvas-node.canvas-pencil-text,
+body .canvas-node.canvas-pencil-text .canvas-node-container,
+body .canvas-node.canvas-pencil-text .canvas-node-content,
+body .canvas-node.canvas-pencil-text .markdown-preview-view,
+body .canvas-node.canvas-pencil-text .markdown-preview-sizer {
+	overflow: visible;
+	contain: none;
 }
 
 /* Selection affordance ONLY: a ring drawn outside the box (outline never affects
    layout, so it can't clip the text). The box hugs the glyphs, so the ring does
    too. Resize handles ride along with selection. */
-.canvas-node.canvas-pencil-text.is-focused .canvas-node-container,
-.canvas-node.canvas-pencil-text.is-selected .canvas-node-container {
-	outline: 1.5px solid var(--interactive-accent) !important;
+body .canvas-node.canvas-pencil-text.is-focused .canvas-node-container,
+body .canvas-node.canvas-pencil-text.is-selected .canvas-node-container {
+	outline: 1.5px solid var(--interactive-accent);
 	outline-offset: 0;
-	border-radius: 0 !important; /* sharp corners — the outline follows this */
+	border-radius: 0; /* sharp corners — the outline follows this */
 }
 
 /* ---- interactive table widget ---- */
 
 /* Unclip the node so the +/reorder pills outside its edges stay visible. */
-.canvas-node.canvas-pencil-table .canvas-node-container,
-.canvas-node.canvas-pencil-table .canvas-node-content {
-	overflow: visible !important;
-	contain: none !important;
+body .canvas-node.canvas-pencil-table .canvas-node-container,
+body .canvas-node.canvas-pencil-table .canvas-node-content {
+	overflow: visible;
+	contain: none;
 }
 
 /* Clear selection ring (the frameless styling removed the native focus border). */
-.canvas-node.canvas-pencil-table.is-focused .canvas-node-container {
+body .canvas-node.canvas-pencil-table.is-focused .canvas-node-container {
 	outline: 2px solid var(--interactive-accent);
 	outline-offset: 1px;
 	border-radius: 0;
@@ -1052,7 +1045,7 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 
 /* while a cell is being edited, only the cell shows selection — not the node */
 
-.canvas-node.canvas-pencil-table.cp-cell-editing .canvas-node-container {
+body .canvas-node.canvas-pencil-table.cp-cell-editing .canvas-node-container {
 	outline: none;
 }
 
@@ -1063,7 +1056,7 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 /* Belt-and-suspenders: keep Obsidian's canvas controls (undo/redo, zoom) above
    any Canvas Kit surface even if a theme re-layers them. */
 body .canvas-wrapper .canvas-controls {
-	z-index: 120 !important;
+	z-index: 120;
 }
 
 /* ---- freehand lasso preview ---- */
@@ -1089,8 +1082,8 @@ body .canvas-wrapper .canvas-controls {
 /* Matched by CONTENT (:has), so the blend applies the instant the stroke
    renders — no JS sweep involved. The .canvas-pencil-highlight-ink class is
    kept as a fallback and for pre-blend-era strokes (detected by opacity). */
-.canvas-node.canvas-pencil-highlight-ink,
-.canvas-node:has(svg.cp-ink-highlight),
+body .canvas-node.canvas-pencil-highlight-ink,
+body .canvas-node:has(svg.cp-ink-highlight),
 .canvas-pencil-overlay-marker.is-highlight canvas {
 	mix-blend-mode: multiply;
 }

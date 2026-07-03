@@ -251,7 +251,7 @@ type Point = [number, number, number];
 // ---------- QuickShape (Procreate-style): hold still at stroke end → snap ----------
 
 /** How long the pen must sit still (ms) before lifting to trigger a snap. */
-const QUICKSHAPE_HOLD_MS = 450;
+const QUICKSHAPE_HOLD_MS = 280;
 /** Client-pixel wiggle allowed while "holding still" (pen jitter). */
 const QUICKSHAPE_JITTER_PX = 6;
 
@@ -267,7 +267,7 @@ const shapeSampleLine = (a: [number, number], b: [number, number], n: number): P
 /**
  * Classify a freehand stroke as a clean line, ellipse, or rectangle and return
  * replacement points, or null when it doesn't confidently match any shape.
- * All geometry is axis-aligned (v1) and works in world coordinates.
+ * Rotation-aware: tilted rectangles and ellipses snap at their drawn angle.
  */
 function quickShapeFor(raw: Point[]): Point[] | null {
 	if (raw.length < 8) return null;
@@ -316,46 +316,95 @@ function quickShapeFor(raw: Point[]): Point[] | null {
 
 	// --- closed loop? (came back near the start) ---
 	if (chord > 0.25 * pathLen) return null;
-	const cx = (minX + maxX) / 2;
-	const cy = (minY + maxY) / 2;
-	const a = Math.max(1e-6, w / 2);
-	const b = Math.max(1e-6, h / 2);
 
-	// Enclosed area vs bounding box (shoelace): an ellipse inscribed in its box
-	// covers π/4 ≈ 0.785 of it, a rectangle ≈ 1. That gap is the discriminator.
+	// Enclosed area (shoelace) — orientation-independent.
 	let area2 = 0;
 	for (let i = 0; i < pts.length; i++) {
 		const [x1, y1] = pts[i];
 		const [x2, y2] = pts[(i + 1) % pts.length];
 		area2 += x1 * y2 - x2 * y1;
 	}
-	const areaRatio = Math.abs(area2) / 2 / (w * h);
+	const area = Math.abs(area2) / 2;
 
-	if (areaRatio > 0.88) {
-		// rectangle: the loop hugs its bounding box
+	// Find the MINIMUM-AREA rotated bounding box (brute force over 2° steps —
+	// cheap, and rotation-aware so a tilted rectangle still reads as one).
+	// Against its own min box, a rectangle covers ≈1 of the area and an ellipse
+	// covers π/4 ≈ 0.785, at any tilt. The axis-aligned box misses tilted rects
+	// (a 10° tilt already drops them to ~0.73, straight into ellipse range).
+	let bestArea = Infinity;
+	let bestTheta = 0;
+	let bU = 0, bV = 0, bMinU = 0, bMinV = 0; // half extents + mins in best frame
+	for (let deg = 0; deg < 90; deg += 2) {
+		const t = (deg * Math.PI) / 180;
+		const c = Math.cos(t);
+		const s = Math.sin(t);
+		let mnU = Infinity, mxU = -Infinity, mnV = Infinity, mxV = -Infinity;
+		for (const [x, y] of pts) {
+			const u = x * c + y * s;
+			const v = -x * s + y * c;
+			if (u < mnU) mnU = u;
+			if (u > mxU) mxU = u;
+			if (v < mnV) mnV = v;
+			if (v > mxV) mxV = v;
+		}
+		const boxArea = (mxU - mnU) * (mxV - mnV);
+		if (boxArea < bestArea) {
+			bestArea = boxArea;
+			bestTheta = t;
+			bU = (mxU - mnU) / 2;
+			bV = (mxV - mnV) / 2;
+			bMinU = mnU;
+			bMinV = mnV;
+		}
+	}
+	if (bestArea <= 0) return null;
+	const areaRatio = area / bestArea;
+	const cos = Math.cos(bestTheta);
+	const sin = Math.sin(bestTheta);
+	// box center in the rotated frame → world
+	const cu = bMinU + bU;
+	const cv = bMinV + bV;
+	const toWorld = (u: number, v: number): [number, number] => [
+		u * cos - v * sin,
+		u * sin + v * cos,
+	];
+
+	if (areaRatio > 0.86) {
+		// rectangle: snap to the min-area box (keeps the drawn tilt)
 		const n = 12;
+		const c1 = toWorld(bMinU, bMinV);
+		const c2 = toWorld(bMinU + 2 * bU, bMinV);
+		const c3 = toWorld(bMinU + 2 * bU, bMinV + 2 * bV);
+		const c4 = toWorld(bMinU, bMinV + 2 * bV);
 		return [
-			...shapeSampleLine([minX, minY], [maxX, minY], n),
-			...shapeSampleLine([maxX, minY], [maxX, maxY], n),
-			...shapeSampleLine([maxX, maxY], [minX, maxY], n),
-			...shapeSampleLine([minX, maxY], [minX, minY], n),
+			...shapeSampleLine(c1, c2, n),
+			...shapeSampleLine(c2, c3, n),
+			...shapeSampleLine(c3, c4, n),
+			...shapeSampleLine(c4, c1, n),
 		];
 	}
 
-	if (areaRatio > 0.62) {
-		// ellipse candidate — confirm with the normalized radial profile
-		// (~constant 1 for an ellipse; a blob or bean shape scatters more).
+	if (areaRatio > 0.65) {
+		// ellipse candidate — confirm with the normalized radial profile in the
+		// box frame (~constant 1 for an ellipse; blobs and beans scatter more).
+		const a = Math.max(1e-6, bU);
+		const b = Math.max(1e-6, bV);
+		const rr = pts.map(([x, y]) => {
+			const u = x * cos + y * sin;
+			const v = -x * sin + y * cos;
+			return Math.hypot((u - cu) / a, (v - cv) / b);
+		});
 		let mean = 0;
-		const rs = pts.map(([x, y]) => Math.hypot((x - cx) / a, (y - cy) / b));
-		for (const r of rs) mean += r;
-		mean /= rs.length;
+		for (const r of rr) mean += r;
+		mean /= rr.length;
 		let variance = 0;
-		for (const r of rs) variance += (r - mean) * (r - mean);
-		if (Math.sqrt(variance / rs.length) / mean < 0.15) {
+		for (const r of rr) variance += (r - mean) * (r - mean);
+		if (Math.sqrt(variance / rr.length) / mean < 0.12) {
 			const out: Point[] = [];
 			for (let i = 0; i <= 64; i++) {
 				const t = (i / 64) * Math.PI * 2;
-				out.push([cx + a * Math.cos(t), cy + b * Math.sin(t), 0.5]);
+				const [x, y] = toWorld(cu + a * Math.cos(t), cv + b * Math.sin(t));
+				out.push([x, y, 0.5]);
 			}
 			return out;
 		}
@@ -2247,7 +2296,6 @@ class CanvasToolbar {
 	refreshNodeStyles() {
 		const canvas = this.view.canvas;
 		if (!canvas?.nodes) return;
-		let tableSelected = false;
 		for (const node of canvas.nodes.values()) {
 			const el = node.nodeEl;
 			if (!el) continue;
@@ -2334,7 +2382,6 @@ class CanvasToolbar {
 					}
 				}
 				this.mountTableWidget(node, el);
-				if (el.hasClass("is-focused") || el.hasClass("is-selected")) tableSelected = true;
 			} else {
 				// A plain Obsidian text card. While it's still empty, offer the
 				// [+]/embed affordance so it can become a new/existing note in place;
@@ -2354,10 +2401,6 @@ class CanvasToolbar {
 				else this.unmountCardActions(el);
 			}
 		}
-		// Flag "a table is selected" on the canvas wrapper so CSS can hide the
-		// floating card menu (.canvas-card-menu) that would otherwise cover the
-		// table's top column-reorder handles.
-		canvas.wrapperEl.toggleClass("canvas-kit-table-selected", tableSelected);
 	}
 
 	/** Snap an ink node's box back to its drawing's aspect ratio after a resize. */
