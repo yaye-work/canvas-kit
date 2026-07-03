@@ -1221,8 +1221,8 @@ body .canvas-wrapper .canvas-controls {
 	align-items: center;
 	justify-content: center;
 	width: 44px;
-	height: 44px;
-	border-radius: 12px;
+	height: 33px; /* match the Done button and the rest of the expanded bar */
+	border-radius: 5px;
 	cursor: pointer;
 	color: var(--text-on-accent);
 	background: var(--interactive-accent);
