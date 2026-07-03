@@ -1956,6 +1956,10 @@ class CanvasToolbar {
 			const text = node.text;
 			if (typeof text === "string" && text.startsWith("<svg") && text.includes(INK_MARK)) {
 				el.addClass("canvas-pencil-ink");
+				el.toggleClass(
+					"canvas-pencil-highlight-ink",
+					text.includes("cp-ink-highlight") || text.includes("stroke-opacity=")
+				);
 				this.bindInkRecognition(node, el);
 				// Never open raw SVG source. The toolbar's Edit button calls
 				// startEditing — repurpose it to re-enter the marker tool so the
@@ -2360,6 +2364,7 @@ class MarkerOverlay extends ToolOverlay {
 
 	onModeChange() {
 		this.el.toggleClass("is-erasing", this.tb.markerMode === "erase");
+		this.el.toggleClass("is-highlight", this.tb.markerMode === "highlight");
 	}
 
 	/** Second finger landed — this is a pan/zoom, not a stroke. Drop the stroke. */
@@ -4388,8 +4393,11 @@ function buildStrokesSvg(strokes: PencilStroke[]): InkSvg | null {
 	// stroke shows as drawn until Obsidian's node color (--canvas-color) overrides
 	// it via CSS — letting the toolbar's color button recolor the stroke.
 	const drawn = strokes[0]?.color ?? "#1e1e1e";
+	// Highlight strokes get an extra class so CSS can blend the whole node
+	// (multiply/screen) with the content underneath instead of covering it.
+	const cls = strokes.every((st) => st.highlight) ? `${INK_MARK} cp-ink-highlight` : INK_MARK;
 	const svg =
-		`<svg class="${INK_MARK}" xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${width} ${height}" width="${width}" height="${height}" style="color:${drawn}">${parts.join("")}</svg>`;
+		`<svg class="${cls}" xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${width} ${height}" width="${width}" height="${height}" style="color:${drawn}">${parts.join("")}</svg>`;
 	return { svg, box: { x, y, width, height } };
 }
 
