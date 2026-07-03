@@ -9,6 +9,8 @@ Ink is stored as inline SVG inside ordinary canvas text nodes — **no separate 
 
 ## Tools
 
+- **Select Area** (`S`) — drag a marquee to select everything it touches, then move or delete the lot. Especially handy on iPad, where drag-to-select isn't otherwise available. While any tool is active on touch devices: **two-finger tap = undo, three-finger tap = redo**, and two fingers pan/pinch-zoom the canvas.
+
 - **Draw Kit** (`M`) — Smooth freehand Marker,Highlighter, Washi Tape with different designs (you can also upload any image and it will become a tape).
 <img alt="Draw Kit" src="https://github.com/user-attachments/assets/ac19f481-9e50-4142-8488-867a68072064" />
 

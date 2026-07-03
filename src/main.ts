@@ -298,6 +298,13 @@ interface CanvasLike {
 	scale?: number;
 	undo?: () => void;
 	redo?: () => void;
+	getIntersectingNodes?: (bbox: {
+		minX: number;
+		minY: number;
+		maxX: number;
+		maxY: number;
+	}) => CanvasNodeLike[];
+	selectAll?: (nodes?: CanvasNodeLike[]) => void;
 }
 
 /** True for nodes created by the marker/highlighter/tape tools. */
@@ -310,7 +317,7 @@ interface CanvasViewLike extends ItemView {
 	canvas?: CanvasLike;
 }
 
-type ToolId = "select" | "marker" | "text" | "card" | "section" | "table" | "image";
+type ToolId = "select" | "marquee" | "marker" | "text" | "card" | "section" | "table" | "image";
 type MarkerMode = "draw" | "highlight" | "tape" | "erase";
 type CardMode = "empty" | "new" | "existing";
 
@@ -526,6 +533,7 @@ const ICON_CARD_EXISTING = filledMulti("M8.13 11.82a3.3 3.3 0 0 1 3.97 4.42.6.6 
 
 const TOOLS: { id: ToolId; icon: string; label: string; key: string; svg?: string }[] = [
 	{ id: "select", icon: "mouse-pointer-2", label: "Select (V or Esc)", key: "v" },
+	{ id: "marquee", icon: "box-select", label: "Select area — drag to select (S)", key: "s" },
 	{ id: "marker", icon: "pencil", label: "Draw tools (M)", key: "m", svg: ICON_MARKER },
 	{ id: "text", icon: "type", label: "Text — click to type (T)", key: "t", svg: ICON_TEXT },
 	{ id: "card", icon: "file", label: "Card — drag to size (C)", key: "c", svg: ICON_CARD },
@@ -712,6 +720,8 @@ class CanvasToolbar {
 		if (tool === "marker") {
 			this.overlay = new MarkerOverlay(this);
 			this.showMarkerSubBar();
+		} else if (tool === "marquee") {
+			this.overlay = new MarqueeSelectOverlay(this);
 		} else if (tool === "text") {
 			this.overlay = new TextEditOverlay(this);
 		} else if (tool === "card") {
@@ -2069,8 +2079,6 @@ abstract class ToolOverlay {
 	private gestureMoved = false;
 	private gestureMaxTouches = 0;
 	private gestureStartPos = new Map<number, { x: number; y: number }>();
-	private lastMultiTapTime = 0;
-	private lastMultiTapCount = 0;
 
 	constructor(protected tb: CanvasToolbar, cls: string) {
 		this.el = tb.view.canvas!.wrapperEl.createDiv({ cls: `canvas-pencil-overlay ${cls}` });
@@ -2155,29 +2163,16 @@ abstract class ToolOverlay {
 	}
 
 	/**
-	 * A multi-finger gesture that never moved and ended fast is a TAP. Two
-	 * two-finger taps in quick succession undo (Procreate-style); with three
-	 * fingers they redo.
+	 * A multi-finger gesture that never moved and ended fast is a TAP
+	 * (Procreate-style): two fingers undo, three fingers redo.
 	 */
 	private onGestureEnd() {
-		const quick = Date.now() - this.gestureStartTime < 300;
-		if (!quick || this.gestureMoved) {
-			this.lastMultiTapTime = 0;
-			return;
-		}
-		const count = this.gestureMaxTouches;
-		const now = Date.now();
-		if (now - this.lastMultiTapTime < 450 && this.lastMultiTapCount === count) {
-			this.lastMultiTapTime = 0;
-			try {
-				if (count >= 3) this.canvas.redo?.();
-				else this.canvas.undo?.();
-			} catch (err) {
-				console.warn("Canvas Kit: gesture undo failed", err);
-			}
-		} else {
-			this.lastMultiTapTime = now;
-			this.lastMultiTapCount = count;
+		if (Date.now() - this.gestureStartTime >= 300 || this.gestureMoved) return;
+		try {
+			if (this.gestureMaxTouches >= 3) this.canvas.redo?.();
+			else this.canvas.undo?.();
+		} catch (err) {
+			console.warn("Canvas Kit: gesture undo failed", err);
 		}
 	}
 
@@ -2611,6 +2606,95 @@ class TextEditOverlay extends ToolOverlay {
 
 	onDestroy() {
 		this.tb.activeTextEditor?.commit();
+	}
+}
+
+// --- Marquee selection: drag a rectangle, everything intersecting is selected ---
+
+class MarqueeSelectOverlay extends ToolOverlay {
+	private rectEl: HTMLElement;
+	private hintEl: HTMLElement;
+	private start: { x: number; y: number } | null = null; // client coords
+	private startWorld: { x: number; y: number } | null = null;
+
+	constructor(tb: CanvasToolbar) {
+		super(tb, "canvas-pencil-overlay-section");
+		this.rectEl = this.el.createDiv({ cls: "canvas-pencil-marquee" });
+		this.rectEl.hide();
+		this.hintEl = this.el.createDiv({
+			cls: "canvas-pencil-hint",
+			text: "Drag to select",
+		});
+		this.hintEl.hide();
+
+		this.el.addEventListener("pointerdown", (e) => {
+			if (e.button !== 0) return;
+			if (this.gesturing() || (e.pointerType === "touch" && !e.isPrimary)) return;
+			this.el.setPointerCapture(e.pointerId);
+			this.start = { x: e.clientX, y: e.clientY };
+			this.startWorld = this.worldFromClient(e.clientX, e.clientY);
+			this.hintEl.hide();
+			e.preventDefault();
+		});
+		this.el.addEventListener("pointermove", (e) => {
+			if (this.gesturing()) return;
+			const r = this.el.getBoundingClientRect();
+			if (!this.start) {
+				this.hintEl.style.left = `${e.clientX - r.left + 14}px`;
+				this.hintEl.style.top = `${e.clientY - r.top + 14}px`;
+				this.hintEl.show();
+				return;
+			}
+			this.rectEl.style.left = `${Math.min(this.start.x, e.clientX) - r.left}px`;
+			this.rectEl.style.top = `${Math.min(this.start.y, e.clientY) - r.top}px`;
+			this.rectEl.style.width = `${Math.abs(e.clientX - this.start.x)}px`;
+			this.rectEl.style.height = `${Math.abs(e.clientY - this.start.y)}px`;
+			this.rectEl.show();
+		});
+		this.el.addEventListener("pointerup", (e) => {
+			if (!this.start || !this.startWorld) return;
+			const a = this.startWorld;
+			const b = this.worldFromClient(e.clientX, e.clientY);
+			this.start = this.startWorld = null;
+			this.rectEl.hide();
+			const canvas = this.canvas;
+			const bbox = {
+				minX: Math.min(a.x, b.x),
+				minY: Math.min(a.y, b.y),
+				maxX: Math.max(a.x, b.x),
+				maxY: Math.max(a.y, b.y),
+			};
+			// A tap (no real drag) just clears the selection and stays armed.
+			if (bbox.maxX - bbox.minX < 4 && bbox.maxY - bbox.minY < 4) {
+				canvas.deselectAll?.();
+				return;
+			}
+			let nodes: CanvasNodeLike[] = [];
+			try {
+				nodes = canvas.getIntersectingNodes?.(bbox) ?? [];
+			} catch (err) {
+				console.warn("Canvas Kit: marquee hit test failed", err);
+			}
+			if (nodes.length && typeof canvas.selectAll === "function") {
+				canvas.selectAll(nodes);
+				// Hand off to the native Select tool so the selection can be
+				// dragged/deleted immediately.
+				this.tb.revertToSelect();
+			} else {
+				canvas.deselectAll?.();
+			}
+		});
+	}
+
+	/** Second finger landed — this is a pan/zoom; abandon the marquee drag. */
+	protected onGestureStart() {
+		this.start = this.startWorld = null;
+		this.rectEl.hide();
+		this.hintEl.hide();
+	}
+
+	hideHint() {
+		this.hintEl.hide();
 	}
 }
 
