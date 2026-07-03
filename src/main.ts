@@ -724,6 +724,8 @@ class CanvasToolbar {
 	private searchIndex = 0;
 	private searchSectionsOnly = false;
 	private searchDebounce = 0;
+	private searchOutside: ((e: PointerEvent) => void) | null = null;
+	private searchVVUnbind: (() => void) | null = null;
 	private inkIndexPromise: Promise<void> | null = null;
 
 	private buildSearchButton() {
@@ -758,6 +760,8 @@ class CanvasToolbar {
 			attr: { "aria-label": "Next match" },
 		});
 		setIcon(next, "chevron-down");
+		const done = row.createEl("button", { cls: "canvas-kit-search-done", text: "Done" });
+		done.addEventListener("click", () => this.closeSearch());
 
 		const meta = panel.createDiv({ cls: "canvas-kit-search-meta" });
 		const toggle = meta.createEl("label", { cls: "canvas-kit-search-toggle" });
@@ -799,10 +803,46 @@ class CanvasToolbar {
 				if (this.searchInputEl?.value) this.runSearch(this.searchInputEl.value);
 			});
 		}
+		// Tapping anywhere outside the panel (canvas, toolbar, …) collapses it.
+		this.searchOutside = (e: PointerEvent) => {
+			const t = e.target as Node;
+			if (!panel.contains(t) && !this.searchBtnEl?.contains(t)) this.closeSearch();
+		};
+		window.setTimeout(() => {
+			if (this.searchOutside) {
+				this.doc.addEventListener("pointerdown", this.searchOutside, true);
+			}
+		}, 0);
+
+		// iPad: the on-screen keyboard overlays the bottom of the view — ride the
+		// visual viewport so the panel stays above it while typing.
+		const vv = this.doc.defaultView?.visualViewport;
+		if (vv) {
+			const adjust = () => {
+				if (!this.searchPanelEl) return;
+				const wrapRect = wrap.getBoundingClientRect();
+				const covered = Math.max(0, wrapRect.bottom - (vv.offsetTop + vv.height));
+				this.searchPanelEl.style.bottom = `${72 + covered}px`;
+			};
+			vv.addEventListener("resize", adjust);
+			vv.addEventListener("scroll", adjust);
+			this.searchVVUnbind = () => {
+				vv.removeEventListener("resize", adjust);
+				vv.removeEventListener("scroll", adjust);
+			};
+			adjust();
+		}
+
 		window.setTimeout(() => input.focus(), 0);
 	}
 
 	private closeSearch() {
+		if (this.searchOutside) {
+			this.doc.removeEventListener("pointerdown", this.searchOutside, true);
+			this.searchOutside = null;
+		}
+		this.searchVVUnbind?.();
+		this.searchVVUnbind = null;
 		this.clearSearchMarks();
 		this.searchPanelEl?.remove();
 		this.searchPanelEl = null;

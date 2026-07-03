@@ -1202,3 +1202,10 @@ body .canvas-wrapper .canvas-controls {
 		0 0 24px hsla(var(--interactive-accent-hsl), 0.55);
 	border-radius: var(--radius-m);
 }
+
+.canvas-kit-search-done {
+	flex-shrink: 0;
+	padding: 4px 10px;
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
