@@ -3,6 +3,7 @@ import {
 	ItemView,
 	Menu,
 	Notice,
+	Platform,
 	Plugin,
 	PluginSettingTab,
 	Setting,
@@ -846,29 +847,32 @@ class CanvasToolbar {
 		done.addEventListener("click", () => this.closeSearch());
 		this.searchStatusEl = panel.createDiv({ cls: "canvas-kit-search-status" });
 
-		// Choreography: Done starts AT the corner button (it "is" the button),
-		// everything else starts transparent and slightly right; one frame later
-		// all transition to their resting spots.
-		const fadeEls = [toggle, navGroup, field];
-		for (const el of fadeEls) {
-			el.style.opacity = "0";
-			el.style.transform = "translateX(24px)";
-		}
-		if (btnRect) {
-			const dr = done.getBoundingClientRect(); // forces layout, pre-paint
-			done.style.transform = `translate(${
-				btnRect.left + btnRect.width / 2 - (dr.left + dr.width / 2)
-			}px, ${btnRect.top + btnRect.height / 2 - (dr.top + dr.height / 2)}px)`;
-		}
-		window.requestAnimationFrame(() => {
+		// Choreography (desktop only — skipped on tablet, where it just feels
+		// laggy against the keyboard): Done starts AT the corner button (it "is"
+		// the button), everything else starts transparent and slightly right;
+		// one frame later all transition to their resting spots.
+		if (!Platform.isMobile) {
+			const fadeEls = [toggle, navGroup, field];
+			for (const el of fadeEls) {
+				el.style.opacity = "0";
+				el.style.transform = "translateX(24px)";
+			}
+			if (btnRect) {
+				const dr = done.getBoundingClientRect(); // forces layout, pre-paint
+				done.style.transform = `translate(${
+					btnRect.left + btnRect.width / 2 - (dr.left + dr.width / 2)
+				}px, ${btnRect.top + btnRect.height / 2 - (dr.top + dr.height / 2)}px)`;
+			}
 			window.requestAnimationFrame(() => {
-				done.style.transform = "";
-				for (const el of fadeEls) {
-					el.style.opacity = "1";
-					el.style.transform = "";
-				}
+				window.requestAnimationFrame(() => {
+					done.style.transform = "";
+					for (const el of fadeEls) {
+						el.style.opacity = "1";
+						el.style.transform = "";
+					}
+				});
 			});
-		});
+		}
 
 		const rerun = () => this.runSearch(input.value);
 		input.addEventListener("input", () => {
@@ -917,10 +921,18 @@ class CanvasToolbar {
 		// visual viewport so the panel stays above it while typing.
 		const vv = this.doc.defaultView?.visualViewport;
 		if (vv) {
+			let keyboardWasUp = false;
 			const adjust = () => {
 				if (!this.searchPanelEl) return;
 				const wrapRect = wrap.getBoundingClientRect();
 				const covered = Math.max(0, wrapRect.bottom - (vv.offsetTop + vv.height));
+				// Tablet: once the keyboard has been up, collapsing it (covered
+				// drops back near zero) also collapses the search bar.
+				if (covered > 120) keyboardWasUp = true;
+				else if (keyboardWasUp && covered < 60) {
+					this.closeSearch();
+					return;
+				}
 				this.searchPanelEl.style.bottom = `${18 + covered}px`;
 			};
 			vv.addEventListener("resize", adjust);
