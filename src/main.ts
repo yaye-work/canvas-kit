@@ -248,6 +248,121 @@ function canvasTransform(canvas: CanvasLike) {
 
 type Point = [number, number, number];
 
+// ---------- QuickShape (Procreate-style): hold still at stroke end → snap ----------
+
+/** How long the pen must sit still (ms) before lifting to trigger a snap. */
+const QUICKSHAPE_HOLD_MS = 450;
+/** Client-pixel wiggle allowed while "holding still" (pen jitter). */
+const QUICKSHAPE_JITTER_PX = 6;
+
+const shapeSampleLine = (a: [number, number], b: [number, number], n: number): Point[] => {
+	const pts: Point[] = [];
+	for (let i = 0; i <= n; i++) {
+		const t = i / n;
+		pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 0.5]);
+	}
+	return pts;
+};
+
+/**
+ * Classify a freehand stroke as a clean line, ellipse, or rectangle and return
+ * replacement points, or null when it doesn't confidently match any shape.
+ * All geometry is axis-aligned (v1) and works in world coordinates.
+ */
+function quickShapeFor(raw: Point[]): Point[] | null {
+	if (raw.length < 8) return null;
+	// Drop the dwell tail: points bunched where the pen sat still would skew fits.
+	const pts = raw.slice();
+	while (
+		pts.length > 8 &&
+		Math.hypot(
+			pts[pts.length - 1][0] - pts[pts.length - 2][0],
+			pts[pts.length - 1][1] - pts[pts.length - 2][1]
+		) < 0.5
+	) {
+		pts.pop();
+	}
+	let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+	for (const [x, y] of pts) {
+		if (x < minX) minX = x;
+		if (x > maxX) maxX = x;
+		if (y < minY) minY = y;
+		if (y > maxY) maxY = y;
+	}
+	const w = maxX - minX;
+	const h = maxY - minY;
+	if (Math.hypot(w, h) < 24) return null; // too small to mean anything
+
+	let pathLen = 0;
+	for (let i = 1; i < pts.length; i++) {
+		pathLen += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+	}
+	if (pathLen <= 0) return null;
+	const [sx, sy] = pts[0];
+	const [ex, ey] = pts[pts.length - 1];
+	const chord = Math.hypot(ex - sx, ey - sy);
+
+	// --- line: barely any detour, every point near the start→end chord ---
+	if (chord / pathLen > 0.9) {
+		let maxDev = 0;
+		for (const [x, y] of pts) {
+			// perpendicular distance to the chord
+			const d = Math.abs((ey - sy) * x - (ex - sx) * y + ex * sy - ey * sx) / chord;
+			if (d > maxDev) maxDev = d;
+		}
+		if (maxDev / chord < 0.08) return shapeSampleLine([sx, sy], [ex, ey], 16);
+		return null;
+	}
+
+	// --- closed loop? (came back near the start) ---
+	if (chord > 0.25 * pathLen) return null;
+	const cx = (minX + maxX) / 2;
+	const cy = (minY + maxY) / 2;
+	const a = Math.max(1e-6, w / 2);
+	const b = Math.max(1e-6, h / 2);
+
+	// Enclosed area vs bounding box (shoelace): an ellipse inscribed in its box
+	// covers π/4 ≈ 0.785 of it, a rectangle ≈ 1. That gap is the discriminator.
+	let area2 = 0;
+	for (let i = 0; i < pts.length; i++) {
+		const [x1, y1] = pts[i];
+		const [x2, y2] = pts[(i + 1) % pts.length];
+		area2 += x1 * y2 - x2 * y1;
+	}
+	const areaRatio = Math.abs(area2) / 2 / (w * h);
+
+	if (areaRatio > 0.88) {
+		// rectangle: the loop hugs its bounding box
+		const n = 12;
+		return [
+			...shapeSampleLine([minX, minY], [maxX, minY], n),
+			...shapeSampleLine([maxX, minY], [maxX, maxY], n),
+			...shapeSampleLine([maxX, maxY], [minX, maxY], n),
+			...shapeSampleLine([minX, maxY], [minX, minY], n),
+		];
+	}
+
+	if (areaRatio > 0.62) {
+		// ellipse candidate — confirm with the normalized radial profile
+		// (~constant 1 for an ellipse; a blob or bean shape scatters more).
+		let mean = 0;
+		const rs = pts.map(([x, y]) => Math.hypot((x - cx) / a, (y - cy) / b));
+		for (const r of rs) mean += r;
+		mean /= rs.length;
+		let variance = 0;
+		for (const r of rs) variance += (r - mean) * (r - mean);
+		if (Math.sqrt(variance / rs.length) / mean < 0.15) {
+			const out: Point[] = [];
+			for (let i = 0; i <= 64; i++) {
+				const t = (i / 64) * Math.PI * 2;
+				out.push([cx + a * Math.cos(t), cy + b * Math.sin(t), 0.5]);
+			}
+			return out;
+		}
+	}
+	return null;
+}
+
 interface PencilStroke {
 	worldPts: Point[];
 	color: string;
@@ -2530,6 +2645,8 @@ class MarkerOverlay extends ToolOverlay {
 	private canvasEl: HTMLCanvasElement;
 	private ctx: CanvasRenderingContext2D;
 	private current: PencilStroke | null = null;
+	/** Where the pen last actually moved (client px) — QuickShape hold detector. */
+	private holdAnchor: { x: number; y: number; t: number } | null = null;
 	private tapeStart: { x: number; y: number } | null = null;
 	private tapeEnd: { x: number; y: number } | null = null;
 	private tapePreviewEl: HTMLElement;
@@ -2556,6 +2673,7 @@ class MarkerOverlay extends ToolOverlay {
 	/** Second finger landed — this is a pan/zoom, not a stroke. Drop the stroke. */
 	protected onGestureStart() {
 		this.current = null;
+		this.holdAnchor = null;
 		this.tapeStart = this.tapeEnd = null;
 		this.tapePreviewEl.hide();
 		this.tapePreviewEl.empty();
@@ -2607,6 +2725,7 @@ class MarkerOverlay extends ToolOverlay {
 							: this.tb.markerSize,
 					highlight: mode === "highlight",
 				};
+				this.holdAnchor = { x: e.clientX, y: e.clientY, t: Date.now() };
 			}
 			e.preventDefault();
 		});
@@ -2631,6 +2750,12 @@ class MarkerOverlay extends ToolOverlay {
 				const w = this.worldFromClient(ev.clientX, ev.clientY);
 				this.current.worldPts.push([w.x, w.y, 0.5]);
 			}
+			// QuickShape: the anchor only moves when the pen really moves, so
+			// (now - anchor.t) is how long the pen has been sitting still.
+			const ha = this.holdAnchor;
+			if (ha && Math.hypot(e.clientX - ha.x, e.clientY - ha.y) > QUICKSHAPE_JITTER_PX) {
+				this.holdAnchor = { x: e.clientX, y: e.clientY, t: Date.now() };
+			}
 			this.redraw();
 			e.preventDefault();
 		});
@@ -2647,6 +2772,7 @@ class MarkerOverlay extends ToolOverlay {
 				// One stroke (pointer down → up) becomes one ink node, immediately.
 				const stroke = this.current;
 				this.current = null;
+				this.maybeSnapShape(stroke);
 				if (stroke.worldPts.length > 1) this.commitStroke(stroke);
 				this.redraw();
 			}
@@ -2774,6 +2900,19 @@ class MarkerOverlay extends ToolOverlay {
 		this.tapePreviewEl.style.height = `${ink.box.height * scale}px`;
 		setSvg(this.tapePreviewEl, ink.svg);
 		this.tapePreviewEl.show();
+	}
+
+	/**
+	 * QuickShape: if the pen sat still at the end of the stroke (Procreate's
+	 * hold-to-snap gesture), replace the freehand points with a clean line,
+	 * ellipse, or rectangle in place. Mutates the stroke before commit.
+	 */
+	private maybeSnapShape(stroke: PencilStroke) {
+		const ha = this.holdAnchor;
+		this.holdAnchor = null;
+		if (!ha || Date.now() - ha.t < QUICKSHAPE_HOLD_MS) return;
+		const snapped = quickShapeFor(stroke.worldPts);
+		if (snapped) stroke.worldPts = snapped;
 	}
 
 	private commitStroke(stroke: PencilStroke) {
