@@ -1116,8 +1116,7 @@ body .canvas-wrapper .canvas-controls {
 
 .canvas-kit-search-panel {
 	position: absolute;
-	left: 50%;
-	transform: translateX(-50%);
+	right: 18px;
 	bottom: 18px;
 	z-index: 125;
 	display: flex;
@@ -1274,7 +1273,7 @@ body .canvas-wrapper .canvas-controls {
 	border-radius: 10px;
 	box-shadow: none;
 	background: var(--interactive-accent);
-	color: var(--text-on-accent);
+	color: #ffffff;
 	border: none;
 }
 
