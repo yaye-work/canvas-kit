@@ -20,8 +20,17 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	z-index: 110;
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 0; /* groups sit flush; the alternating radii create the rhythm */
 	cursor: default; /* restore normal pointer over the bar, not the tool cursor */
+}
+
+/* Alternating corner radii along the bar: 3px, 11px, 3px, 11px, … */
+.canvas-pencil-bar .canvas-pencil-group:nth-child(odd) {
+	border-radius: 3px;
+}
+
+.canvas-pencil-bar .canvas-pencil-group:nth-child(even) {
+	border-radius: 11px;
 }
 
 /* Islands: rounded cards holding each tool group / sub-bar segment.
