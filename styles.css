@@ -1067,3 +1067,13 @@ body .canvas-wrapper .canvas-controls {
 .theme-dark .canvas-pencil-overlay-marker.is-highlight canvas {
 	mix-blend-mode: screen;
 }
+
+/* ---- inline stroke-size slider in the draw sub-bar ---- */
+
+.canvas-pencil-size-inline {
+	gap: 8px;
+}
+
+.canvas-pencil-size-inline input[type="range"] {
+	width: 96px;
+}

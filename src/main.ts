@@ -608,7 +608,6 @@ class CanvasToolbar {
 	private subBarEl: HTMLElement | null = null;
 	private sizeSectionEl: HTMLElement | null = null;
 	private styleSectionEl: HTMLElement | null = null;
-	private sizePopupEl: HTMLElement | null = null;
 	private cardSearchEl: HTMLElement | null = null;
 	private cardSearchOutside: ((e: PointerEvent) => void) | null = null;
 	private overlay: ToolOverlay | null = null;
@@ -929,13 +928,24 @@ class CanvasToolbar {
 
 		// Tape has no stroke width — its thickness comes from the drag.
 		if (this.markerMode !== "tape") {
-			this.sizeSectionEl = sub.createDiv({ cls: "canvas-pencil-section" });
-			const sizeBtn = this.sizeSectionEl.createDiv({
-				cls: "canvas-pencil-mode",
-				attr: { "aria-label": "Stroke size" },
+			this.sizeSectionEl = sub.createDiv({
+				cls: "canvas-pencil-section canvas-pencil-size-inline",
 			});
-			setIcon(sizeBtn, "sliders-horizontal");
-			sizeBtn.addEventListener("click", () => this.toggleSizePopup(sizeBtn));
+			const slider = this.sizeSectionEl.createEl("input", {
+				type: "range",
+				attr: { min: "2", max: "30", step: "1", "aria-label": "Stroke size" },
+			});
+			slider.value = String(this.markerSize);
+			const preview = this.sizeSectionEl.createDiv({ cls: "canvas-pencil-size-preview" });
+			const updatePreview = () => {
+				const d = Math.max(3, Math.min(26, this.markerSize));
+				preview.style.width = preview.style.height = `${d}px`;
+			};
+			updatePreview();
+			slider.addEventListener("input", () => {
+				this.markerSize = Number(slider.value);
+				updatePreview();
+			});
 			sub.createDiv({ cls: "canvas-pencil-divider" });
 		}
 
@@ -1518,37 +1528,6 @@ class CanvasToolbar {
 		input.click();
 	}
 
-	private toggleSizePopup(anchor: HTMLElement) {
-		if (this.sizePopupEl) {
-			this.sizePopupEl.remove();
-			this.sizePopupEl = null;
-			return;
-		}
-		const pop = (this.sizePopupEl = this.view.canvas!.wrapperEl.createDiv({
-			cls: "canvas-pencil-size-popup",
-		}));
-		const slider = pop.createEl("input", {
-			type: "range",
-			attr: { min: "2", max: "30", step: "1", "aria-label": "Stroke size" },
-		});
-		slider.value = String(this.markerSize);
-		const preview = pop.createDiv({ cls: "canvas-pencil-size-preview" });
-		const updatePreview = () => {
-			const d = Math.max(3, Math.min(26, this.markerSize));
-			preview.style.width = preview.style.height = `${d}px`;
-		};
-		updatePreview();
-		slider.addEventListener("input", () => {
-			this.markerSize = Number(slider.value);
-			updatePreview();
-		});
-		const wrapRect = this.view.canvas!.wrapperEl.getBoundingClientRect();
-		const btnRect = anchor.getBoundingClientRect();
-		pop.style.left = `${btnRect.left + btnRect.width / 2 - wrapRect.left}px`;
-		// Toolbar is at the top, so the popup opens downward from the button.
-		pop.style.top = `${btnRect.bottom - wrapRect.top + 10}px`;
-	}
-
 	/**
 	 * Mount a transparent, auto-growing textarea over the canvas (Excalidraw-style).
 	 * On commit the text is written to a frameless markdown node. Padding scales
@@ -1938,8 +1917,6 @@ class CanvasToolbar {
 		this.subBarEl = null;
 		this.sizeSectionEl = null;
 		this.styleSectionEl = null;
-		this.sizePopupEl?.remove();
-		this.sizePopupEl = null;
 	}
 
 	// --- node styling sweep ---
