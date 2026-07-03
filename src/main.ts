@@ -52,11 +52,12 @@ const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 // Sizes are evenly spaced (8 apart) but the DESIGN places the ticks with
 // growing gaps. Positions are the EXACT mark centers from the design file
 // (156.306px container), expressed as fractions of the track width.
-const STROKE_PRESETS = [8, 16, 24, 32, 40, 48];
+const STROKE_PRESETS = [8, 16, 24, 32, 40];
 const STROKE_MIN = 8;
-const STROKE_MAX = 48;
-/** mark i's center as a fraction (0..1) of the track — straight from Figma */
-const STROKE_MARK_FRAC = [0.058267, 0.134164, 0.260635, 0.437665, 0.665302, 0.943534];
+const STROKE_MAX = 40;
+/** mark i's center as a fraction (0..1) of the track — 5 marks, evenly spaced
+ * between the design's original first (0.058) and last (0.944) positions */
+const STROKE_MARK_FRAC = [0.058267, 0.279584, 0.500901, 0.722217, 0.943534];
 /** continuous preset index i (0..N-1) → track fraction (piecewise-linear) */
 const strokeIdxToFrac = (i: number) => {
 	const lo = Math.max(0, Math.min(STROKE_MARK_FRAC.length - 1, Math.floor(i)));
