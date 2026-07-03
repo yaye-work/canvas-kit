@@ -38,17 +38,9 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	recognitionLang: "en_US",
 };
 
-// FigJam-style preset row: black, red, orange, yellow, green, blue, violet, white.
-const PALETTE = [
-	"#1e1e1e",
-	"#e03e3e",
-	"#f08c28",
-	"#f5c731",
-	"#5bb98c",
-	"#4f9ddb",
-	"#7d5bd6",
-	"#ffffff",
-];
+// Designed preset row (Figma): red, yellow, green, blue, magenta. The current
+// color renders as a ring indicator; anything else comes from the wheel.
+const PALETTE = ["#D4523B", "#E1C63B", "#6F9B32", "#3065C9", "#CB73C4"];
 
 // Highlighter presets: pastels (grey, pink, orange, yellow, green, cyan, purple, white).
 const HIGHLIGHT_PALETTE = [
@@ -527,7 +519,8 @@ const svgToCursor = (
 	hotVBx: number,
 	hotVBy: number,
 	size: number,
-	rotate = 0
+	rotate = 0,
+	vb = 24
 ): string => {
 	// Rasterized at 2x and declared as a 2x image so the cursor stays crisp on
 	// retina displays (plain url() SVG cursors are rasterized at 1x → blurry).
@@ -537,9 +530,11 @@ const svgToCursor = (
 			'fill="currentColor"',
 			'fill="#202020" stroke="#ffffff" stroke-width="1.1" paint-order="stroke" stroke-linejoin="round"'
 		);
-	if (rotate) cur = cur.replace("<path ", `<path transform="rotate(${rotate} 12 12)" `);
-	const hx = Math.round((hotVBx / 24) * size);
-	const hy = Math.round((hotVBy / 24) * size);
+	if (rotate) {
+		cur = cur.replace("<path ", `<path transform="rotate(${rotate} ${vb / 2} ${vb / 2})" `);
+	}
+	const hx = Math.round((hotVBx / vb) * size);
+	const hy = Math.round((hotVBy / vb) * size);
 	const url = `url("data:image/svg+xml;utf8,${encodeURIComponent(cur)}")`;
 	return `-webkit-image-set(${url} 2x) ${hx} ${hy}, auto`;
 };
@@ -567,25 +562,50 @@ const ICON_LASSO = filledMulti(
 	"M12.7664 20.0995C13.1272 19.896 13.5846 20.0231 13.7882 20.3838C13.9917 20.7444 13.8644 21.2019 13.5039 21.4056C12.8575 21.7704 12.1927 22.0758 11.5191 22.3068C11.1273 22.4412 10.6999 22.2323 10.5655 21.8404C10.4313 21.4487 10.6403 21.0221 11.0321 20.8878C11.6094 20.6899 12.1905 20.4245 12.7664 20.0995ZM6.10445 21.5885C6.21193 21.1884 6.62343 20.9511 7.02345 21.0586C7.28423 21.1286 7.56675 21.1882 7.87116 21.2357C8.16449 21.2814 8.4635 21.3028 8.76709 21.3005C9.18125 21.2974 9.51917 21.631 9.52233 22.0452C9.52517 22.4591 9.19251 22.797 8.77858 22.8002C8.39749 22.8031 8.01719 22.7761 7.63992 22.7173C7.28652 22.6622 6.95107 22.5926 6.63433 22.5075C6.23435 22.4 5.99705 21.9885 6.10445 21.5885ZM16.1948 17.3937C16.4823 17.0955 16.9575 17.0868 17.2558 17.3743C17.5537 17.6618 17.5623 18.1361 17.275 18.4343C16.7782 18.9496 16.2547 19.4352 15.7109 19.8818C15.3909 20.1446 14.9187 20.0983 14.6557 19.7786C14.3929 19.4585 14.4387 18.9854 14.7587 18.7225C15.2556 18.3145 15.7367 17.869 16.1948 17.3937ZM3.38652 18.5417C3.77398 18.3956 4.2069 18.5907 4.3532 18.978C4.52388 19.4305 4.80401 19.8362 5.21622 20.1809C5.53387 20.4467 5.57557 20.92 5.30987 21.2377C5.04408 21.5551 4.57164 21.5968 4.25402 21.3311C3.64461 20.8215 3.21221 20.2026 2.95 19.5074C2.80398 19.12 2.99917 18.6879 3.38652 18.5417ZM18.8397 13.8726C19.0448 13.5129 19.5027 13.3875 19.8624 13.5924C20.2222 13.7975 20.3477 14.2553 20.1427 14.6151C19.7947 15.2254 19.4064 15.8237 18.9844 16.4009C18.7399 16.7353 18.27 16.8084 17.9356 16.5639C17.6016 16.3194 17.5287 15.8502 17.7729 15.516C18.1627 14.9829 18.5206 14.4322 18.8397 13.8726ZM3.26833 14.8346C3.42429 14.4509 3.86192 14.2667 4.24561 14.4226C4.62933 14.5785 4.81458 15.0159 4.6586 15.3996C4.42663 15.9703 4.27231 16.5191 4.19696 17.0336C4.13696 17.4434 3.75575 17.727 3.34596 17.6671C2.93612 17.6071 2.65251 17.2259 2.71252 16.8161C2.80795 16.1645 2.99839 15.4987 3.26833 14.8346ZM20.3822 9.83119C20.4557 9.42361 20.8452 9.15284 21.2528 9.22629C21.6605 9.29981 21.9315 9.69022 21.858 10.0979C21.7325 10.7933 21.5352 11.4954 21.279 12.1919C21.1359 12.5805 20.705 12.7796 20.3163 12.6367C19.9278 12.4935 19.7286 12.0626 19.8716 11.674C20.1013 11.0494 20.2739 10.4316 20.3822 9.83119ZM5.64298 11.0591C5.91269 10.7448 6.38637 10.7086 6.70074 10.9783C7.01506 11.248 7.05127 11.7217 6.78157 12.036C6.37942 12.5048 6.01701 12.9823 5.69927 13.4606C5.46997 13.8053 5.00494 13.8985 4.66005 13.6694C4.31516 13.4402 4.22117 12.9754 4.45025 12.6304C4.80377 12.0983 5.20307 11.5719 5.64298 11.0591ZM20.2223 4.82779C20.5866 4.63053 21.042 4.76599 21.2393 5.13022C21.609 5.81305 21.8363 6.55168 21.943 7.31902C21.9999 7.72915 21.7137 8.10815 21.3035 8.16523C20.8935 8.22207 20.5145 7.93569 20.4573 7.52572C20.3727 6.91749 20.1956 6.35394 19.9199 5.84474C19.7227 5.48055 19.8582 5.02509 20.2223 4.82779ZM8.88655 8.08229C9.22164 7.83905 9.69075 7.91345 9.93415 8.24835C10.1774 8.58351 10.1032 9.0526 9.76809 9.29595C9.27363 9.65488 8.80289 10.0348 8.36012 10.4298C8.05107 10.7054 7.57756 10.6784 7.30184 10.3695C7.02608 10.0604 7.0529 9.58599 7.36198 9.31023C7.84197 8.88201 8.35135 8.4708 8.88655 8.08229ZM11.825 6.32347C12.1982 6.14374 12.6464 6.30146 12.8261 6.67465C13.0057 7.04778 12.849 7.49588 12.4759 7.67557C12.2045 7.8063 11.9371 7.94408 11.6742 8.08818C11.311 8.28716 10.8556 8.1539 10.6564 7.79095C10.4574 7.4277 10.5902 6.9713 10.9534 6.77225C11.239 6.61576 11.5296 6.46576 11.825 6.32347ZM5.15005 6.15867C5.40552 5.83264 5.87693 5.77539 6.20297 6.03085C6.52902 6.28632 6.58628 6.75772 6.3308 7.08377C6.12198 7.35028 5.91919 7.6318 5.72306 7.92866C5.4948 8.27416 5.02934 8.36961 4.68376 8.14154C4.3382 7.91325 4.24268 7.44783 4.47088 7.10224C4.68908 6.77195 4.91591 6.45751 5.15005 6.15867ZM16.2617 2.44979C16.3891 2.05585 16.8114 1.83921 17.2054 1.96631C17.596 2.09264 17.9718 2.24481 18.3276 2.42083C18.6796 2.59492 19.0062 2.78747 19.3076 2.99738C19.6475 3.2341 19.7313 3.70175 19.4946 4.04166C19.2579 4.38142 18.7902 4.46523 18.4503 4.22862C18.2132 4.06345 17.9514 3.90776 17.6628 3.765C17.3753 3.62281 17.068 3.49847 16.7442 3.39376C16.3502 3.26627 16.1344 2.8438 16.2617 2.44979ZM9.15227 2.78218C9.51932 2.59024 9.97273 2.73263 10.1647 3.09969C10.3564 3.46661 10.2149 3.91989 9.84812 4.11188C9.26368 4.4175 8.68872 4.79152 8.13514 5.24C7.81329 5.50071 7.34088 5.45061 7.08015 5.12876C6.81964 4.80695 6.86873 4.33469 7.19043 4.07399C7.82164 3.56263 8.47989 3.1338 9.15227 2.78218ZM11.9152 1.76947C12.709 1.59302 13.4993 1.51028 14.2662 1.51233C14.6804 1.51349 15.0153 1.85054 15.0142 2.26472C15.013 2.67879 14.676 3.01382 14.2618 3.01271C13.6057 3.01098 12.9264 3.08136 12.2412 3.23366C11.8369 3.32354 11.436 3.06892 11.3461 2.66457C11.2563 2.26033 11.511 1.85945 11.9152 1.76947Z"
 );
 
+// ---------- Redesigned toolbar icons (Figma: Canvas Kit Icon / Toolbar) ----------
+
+const ICON2_SELECT =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path d="M3.90097 5.91692C3.26242 4.33304 4.78372 2.76458 6.35703 3.28899L6.50937 3.3466L23.0328 10.2861C24.811 11.0331 24.5845 13.6216 22.7037 14.0488L16.0465 15.5585L14.4156 22.3681C13.9655 24.2463 11.3693 24.4387 10.6471 22.6474L3.90097 5.91692ZM5.92832 4.72942C5.5323 4.56309 5.13228 4.95702 5.29258 5.35539L12.0377 22.0868C12.2028 22.4963 12.7699 22.4806 12.9303 22.0995L12.9566 22.0185L14.6656 14.8876C14.7514 14.5297 15.0332 14.2513 15.3922 14.1698L22.0338 12.662L22.3717 12.5859C22.8014 12.4881 22.8768 11.9274 22.527 11.7079L22.4518 11.6689L5.92832 4.72942Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+const ICON2_MARQUEE =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path d="M6.98891 9.07824C10.5572 3.67692 16.3822 2.92192 19.8873 4.65579C28.6726 9.00156 17.8748 24.8226 9.64716 23.5394C1.41955 22.2562 5.93675 12.4663 14.0428 8.56225" stroke="currentColor" stroke-opacity="0.8" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2.5"/></svg>';
+const ICON2_MARKER =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M13.1797 3.52318C13.4841 3.06786 14.1342 3.02562 14.499 3.4099L14.5674 3.4929L14.5732 3.49974L14.5781 3.50755L14.626 3.58372L14.6309 3.59154L14.6348 3.59935L16.0586 6.27025C16.4081 6.40564 16.6893 6.69314 16.8037 7.06908L19.1611 14.8308C19.5259 16.0318 19.7109 17.2808 19.7109 18.5359V22.6765C19.7109 23.3668 19.1511 23.9263 18.4609 23.9265H9.53906C8.84871 23.9265 8.28906 23.3669 8.28906 22.6765V18.3611C8.28912 17.2281 8.4402 16.0996 8.73828 15.0066L10.8936 7.10423C11.0232 6.62964 11.4158 6.28365 11.8877 6.20286L13.1182 3.63255L13.1221 3.62474L13.126 3.6179L13.1699 3.53978L13.1748 3.53099L13.1797 3.52318ZM9.78906 22.4265H18.2109V21.0574H9.78906V22.4265ZM10.1855 15.4011C9.92259 16.3655 9.78912 17.3615 9.78906 18.3611V19.5574H18.2109V18.5359C18.2109 17.4285 18.0474 16.3269 17.7256 15.2673L15.4219 7.68236H12.291L10.1855 15.4011Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+const ICON2_HIGHLIGHTER =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M16.4863 3.16058C16.9377 3.09715 17.3408 3.44723 17.3408 3.90277V6.02777C17.9191 6.09735 18.3818 6.56236 18.4355 7.1557L18.7842 11.0102C18.9145 12.4514 19.3477 13.8499 20.0547 15.1127C20.5602 16.0159 20.8261 17.0349 20.8262 18.0698V22.6723C20.8259 23.3624 20.2658 23.9219 19.5762 23.9223H8.4248C7.73491 23.9223 7.17406 23.3628 7.17383 22.6723V17.9916C7.17391 17.0163 7.40301 16.0542 7.84082 15.183C8.49033 13.891 8.87175 12.4798 8.96191 11.0366L9.20215 7.18988C9.24255 6.54703 9.76454 6.0436 10.4033 6.01996V4.66742C10.4035 4.2938 10.6791 3.97748 11.0488 3.92523L16.4863 3.16058ZM8.6748 22.4223H19.3262V21.0522H8.6748V22.4223ZM10.46 11.1303C10.3572 12.7755 9.92199 14.3841 9.18164 15.8569C8.84882 16.5191 8.67489 17.2505 8.6748 17.9916V19.5522H19.3262V18.0698C19.3261 17.2916 19.1262 16.5253 18.7461 15.8461C17.9361 14.3994 17.4394 12.7973 17.29 11.1459L16.9629 7.518H10.6855L10.46 11.1303Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+const ICON2_TAPE =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M13.5371 3.47067C13.781 3.22765 14.176 3.22761 14.4199 3.47067L17.2441 6.29392L20.0693 3.47067C20.248 3.29266 20.5169 3.23956 20.75 3.33591C20.9833 3.43263 21.1355 3.66064 21.1357 3.91306V20.1465C21.1618 20.1693 21.1786 20.2029 21.1787 20.2402V20.4404C21.1787 20.4773 21.1612 20.5093 21.1357 20.5322V23.1621C21.1357 23.5072 20.8558 23.787 20.5107 23.7871H7.44629C7.10114 23.7871 6.82133 23.5072 6.82129 23.1621V3.91306C6.82154 3.66064 6.97373 3.43264 7.20703 3.33591C7.44017 3.2395 7.70901 3.29252 7.8877 3.47067L10.7119 6.29392L13.5371 3.47067ZM8.07129 22.5371H9.29199V20.5654H8.07129V22.5371ZM9.74219 22.5371H11.5215V20.5654H9.74219V22.5371ZM11.9717 22.5371H13.751V20.5654H11.9717V22.5371ZM14.2012 22.5371H15.9805V20.5654H14.2012V22.5371ZM16.4307 22.5371H18.21V20.5654H16.4307V22.5371ZM18.6602 22.5371H19.8857V20.5654H18.6602V22.5371ZM8.07129 20.1152H9.29199V18.3447H8.07129V20.1152ZM9.74219 20.1152H11.5215V18.3447H9.74219V20.1152ZM11.9717 20.1152H13.751V18.3447H11.9717V20.1152ZM14.2012 20.1152H15.9805V18.3447H14.2012V20.1152ZM16.4307 20.1152H18.21V18.3447H16.4307V20.1152ZM18.6602 20.1152H19.8857V18.3447H18.6602V20.1152ZM8.07129 17.8945H9.29199V16.123H8.07129V17.8945ZM9.74219 17.8945H11.5215V16.123H9.74219V17.8945ZM11.9717 17.8945H13.751V16.123H11.9717V17.8945ZM14.2012 17.8945H15.9805V16.123H14.2012V17.8945ZM16.4307 17.8945H18.21V16.124H16.4307V17.8945ZM18.6602 17.8945H19.8857V16.124H18.6602V17.8945ZM16.4307 15.6738H18.21V13.9023H16.4307V15.6738ZM18.6602 15.6738H19.8857V13.9023H18.6602V15.6738ZM8.07129 15.6728H9.29199V13.9023H8.07129V15.6728ZM9.74219 15.6728H11.5215V13.9023H9.74219V15.6728ZM11.9717 15.6728H13.751V13.9023H11.9717V15.6728ZM14.2012 15.6728H15.9805V13.9023H14.2012V15.6728ZM8.07129 13.4521H9.29199V11.6816H8.07129V13.4521ZM9.74219 13.4521H11.5215V11.6816H9.74219V13.4521ZM11.9717 13.4521H13.751V11.6816H11.9717V13.4521ZM14.2012 13.4521H15.9805V11.6816H14.2012V13.4521ZM16.4307 13.4521H18.21V11.6816H16.4307V13.4521ZM18.6602 13.4521H19.8857V11.6816H18.6602V13.4521ZM8.07129 11.2314H9.29199V9.45993H8.07129V11.2314ZM9.74219 11.2314H11.5215V9.45993H9.74219V11.2314ZM11.9717 11.2314H13.751V9.45993H11.9717V11.2314ZM14.2012 11.2314H15.9805V9.45993H14.2012V11.2314ZM16.4307 11.2314H18.21V9.45993H16.4307V11.2314ZM18.6602 11.2314H19.8857V9.45993H18.6602V11.2314ZM8.07129 9.00974H9.29199V7.23923H8.07129V9.00974ZM9.74219 9.00974H11.5215V7.25485L11.1553 7.62106C10.9114 7.86496 10.5155 7.86507 10.2715 7.62204L9.88867 7.23923H9.74219V9.00974ZM11.9717 9.00974H13.751V7.23923H11.9717V9.00974ZM14.2012 9.00974H15.9805V7.23923H14.2012V9.00974ZM17.6875 7.62106C17.5704 7.73811 17.4106 7.80455 17.2451 7.80466C17.0796 7.80466 16.9207 7.73863 16.8037 7.62204L16.4307 7.24899V9.00974H18.21V7.23923H18.0693L17.6875 7.62106ZM18.6602 9.00974H19.8857V7.23923H18.6602V9.00974ZM8.07129 6.78903H9.29199V6.64255L8.07129 5.42184V6.78903ZM11.9863 6.78903H13.751V5.02438L11.9863 6.78903ZM14.2012 6.78903H15.9707L14.2012 5.0195V6.78903ZM18.6602 6.64743V6.78903H19.8857V5.42184L18.6602 6.64743Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+const ICON2_ERASER =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M15.4811 3.79712C15.751 3.48297 16.2246 3.44755 16.5387 3.71704L24.4137 10.4827L24.4693 10.5354C24.7304 10.8109 24.7468 11.2458 24.4938 11.5403L14.5592 23.1038C14.3217 23.3802 13.9751 23.5392 13.6109 23.5393H9.57383C9.27511 23.5393 8.98579 23.4318 8.75938 23.2375L3.58653 18.7932C3.27278 18.5233 3.23652 18.0498 3.50645 17.7356L15.4811 3.79712ZM9.16367 13.4524L15.901 19.2405L22.8668 11.1311L16.1305 5.34399L9.16367 13.4524Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+const ICON2_CARD =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 28 28" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M23.5132 11.5327C23.7242 11.5328 23.9259 11.6206 24.0698 11.7749L31.0474 19.2554C31.1788 19.3963 31.2515 19.5822 31.2515 19.7749V31.7085C31.2512 32.1287 30.9109 32.4702 30.4907 32.4702H13.5093C13.0894 32.4698 12.7488 32.1284 12.7485 31.7085V12.2915C12.7485 11.8712 13.0899 11.5299 13.5103 11.5298L23.5132 11.5327ZM14.5317 13.0591C14.3878 13.0595 14.271 13.1758 14.271 13.3198V30.6802C14.2715 30.8238 14.3881 30.9405 14.5317 30.9409H29.4683C29.6122 30.9409 29.7285 30.824 29.729 30.6802V21.1255C29.729 20.9812 29.6125 20.8647 29.4683 20.8647H23.7358C23.032 20.8645 22.4636 20.2899 22.4634 19.5854V13.3198C22.4634 13.1756 22.3459 13.0591 22.2017 13.0591H14.5317Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+const ICON2_TEXT =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M7.44973 3.43086C7.55159 3.46477 7.65824 3.48206 7.7656 3.48206H20.2342C20.3417 3.48206 20.4485 3.46473 20.5504 3.43074L21.1055 3.24573C21.1566 3.22891 21.21 3.22034 21.2638 3.22034H21.3277C21.8274 3.22034 22.2324 3.62541 22.2324 4.12509V9.19242C22.2324 9.683 21.8347 10.0807 21.3442 10.0807C20.8981 10.0807 20.5212 9.74987 20.4634 9.30757L20.1418 6.84782C20.1417 6.84682 20.1414 6.84583 20.1411 6.84487C20.1408 6.84388 20.1406 6.84285 20.1404 6.84181C20.0719 6.29662 19.8901 5.95437 19.6475 5.74377C19.4335 5.5583 19.1205 5.4292 18.665 5.40002L18.4609 5.39417H16.4141C15.8618 5.39417 15.4141 5.84188 15.4141 6.39417V21.0211C15.4141 21.5734 15.8618 22.0211 16.4141 22.0211H18.1367C18.6432 22.0211 19.0537 22.4317 19.0537 22.9381C19.0537 23.4446 18.6432 23.8551 18.1367 23.8551H9.86328C9.35684 23.8551 8.94629 23.4446 8.94629 22.9381C8.94629 22.4317 9.35684 22.0211 9.86328 22.0211H11.5859C12.1382 22.0211 12.5859 21.5734 12.5859 21.0211V6.39416C12.5859 5.84188 12.1382 5.39417 11.5859 5.39417H9.53809C8.97045 5.39422 8.59693 5.53189 8.35254 5.74377C8.10956 5.95457 7.92675 6.29718 7.8584 6.84338V6.84631L7.53662 9.30757C7.4788 9.74987 7.10191 10.0807 6.65585 10.0807C6.16527 10.0807 5.76758 9.683 5.76758 9.19242V4.12372C5.76758 3.62479 6.17203 3.22034 6.67096 3.22034C6.76794 3.22034 6.86429 3.23595 6.95631 3.26659L7.44973 3.43086Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+const ICON2_TABLE =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M21.2295 3.45276C21.5331 3.45286 21.7792 3.69896 21.7793 4.00256V23.0729C21.7792 23.3765 21.5331 23.6226 21.2295 23.6227H6.77051C6.46691 23.6226 6.22081 23.3765 6.2207 23.0729V4.00256C6.22081 3.69896 6.46691 3.45286 6.77051 3.45276H21.2295ZM7.77051 18.6959C7.74305 18.696 7.72081 18.7183 7.7207 18.7457V22.0729C7.72081 22.1003 7.74305 22.1226 7.77051 22.1227H11.2217C11.2491 22.1226 11.2714 22.1003 11.2715 22.0729V18.7457C11.2714 18.7183 11.2491 18.696 11.2217 18.6959H7.77051ZM12.8213 18.6959C12.7938 18.696 12.7716 18.7183 12.7715 18.7457V22.0729C12.7716 22.1003 12.7938 22.1226 12.8213 22.1227H20.2295C20.257 22.1226 20.2792 22.1003 20.2793 22.0729V18.7457C20.2792 18.7183 20.257 18.696 20.2295 18.6959H12.8213ZM7.77051 13.9615C7.74305 13.9617 7.72081 13.9839 7.7207 14.0114V17.1461C7.72081 17.1736 7.74305 17.1958 7.77051 17.1959H11.2217C11.2491 17.1958 11.2714 17.1736 11.2715 17.1461V14.0114C11.2714 13.9839 11.2491 13.9617 11.2217 13.9615H7.77051ZM12.8213 13.9615C12.7938 13.9617 12.7716 13.9839 12.7715 14.0114V17.1461C12.7716 17.1736 12.7938 17.1958 12.8213 17.1959H20.2295C20.257 17.1958 20.2792 17.1736 20.2793 17.1461V14.0114C20.2792 13.9839 20.257 13.9617 20.2295 13.9615H12.8213ZM7.77051 9.36682C7.74305 9.36693 7.72081 9.38917 7.7207 9.41663V12.4117C7.72081 12.4392 7.74305 12.4614 7.77051 12.4615H11.2217C11.2491 12.4614 11.2714 12.4392 11.2715 12.4117V9.41663C11.2714 9.38917 11.2491 9.36693 11.2217 9.36682H7.77051ZM12.8213 9.36682C12.7938 9.36693 12.7716 9.38917 12.7715 9.41663V12.4117C12.7716 12.4392 12.7938 12.4614 12.8213 12.4615H20.2295C20.257 12.4614 20.2792 12.4392 20.2793 12.4117V9.41663C20.2792 9.38917 20.257 9.36693 20.2295 9.36682H12.8213ZM7.77051 4.95276C7.74305 4.95286 7.72081 4.9751 7.7207 5.00256V7.81702C7.72081 7.84448 7.74305 7.86672 7.77051 7.86682H11.2217C11.2491 7.86672 11.2714 7.84448 11.2715 7.81702V5.00256C11.2714 4.9751 11.2491 4.95286 11.2217 4.95276H7.77051ZM12.8213 4.95276C12.7938 4.95286 12.7716 4.9751 12.7715 5.00256V7.81702C12.7716 7.84448 12.7938 7.86672 12.8213 7.86682H20.2295C20.257 7.86672 20.2792 7.84448 20.2793 7.81702V5.00256C20.2792 4.9751 20.257 4.95286 20.2295 4.95276H12.8213Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+const ICON2_IMAGE =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.0947 7.04456C11.8078 7.04456 13.1971 8.43314 13.1973 10.1461L13.1934 10.3063C13.1102 11.9452 11.7543 13.2487 10.0947 13.2487L9.93555 13.2448C8.29661 13.1616 6.99316 11.8057 6.99316 10.1461C6.99336 8.43331 8.38194 7.04484 10.0947 7.04456ZM10.0947 8.54456C9.21037 8.54484 8.49336 9.26174 8.49316 10.1461C8.49316 11.0307 9.21024 11.7484 10.0947 11.7487C10.9794 11.7487 11.6973 11.0308 11.6973 10.1461C11.6971 9.26157 10.9793 8.54456 10.0947 8.54456Z" fill="currentColor" fill-opacity="0.8"/> <path fill-rule="evenodd" clip-rule="evenodd" d="M23.4062 3.59045C23.9105 3.6417 24.3047 4.06783 24.3047 4.58557V22.4899L24.2988 22.5924C24.2508 23.0627 23.8767 23.4372 23.4062 23.485L23.3047 23.4899H4.69531L4.59277 23.485C4.0888 23.4337 3.69554 23.0073 3.69531 22.4899V4.58557C3.69531 4.06789 4.08864 3.64179 4.59277 3.59045L4.69531 3.58557H23.3047L23.4062 3.59045ZM5.19531 21.9899H8.88477C9.56318 20.9592 10.2446 19.8505 10.9375 18.7369C11.6902 17.5271 12.4577 16.3155 13.2344 15.2408C14.008 14.1705 14.8147 13.2014 15.6562 12.4948C16.4934 11.7919 17.4404 11.2859 18.4795 11.2858C20.4309 11.2858 21.8487 11.9952 22.8047 12.8434V5.08557H5.19531V21.9899ZM18.4795 12.7858C17.9406 12.7859 17.3279 13.0508 16.6211 13.6442C15.9187 14.2339 15.1964 15.0874 14.4502 16.1198C13.707 17.148 12.9636 18.3202 12.2109 19.5299C11.7028 20.3466 11.1881 21.1816 10.6729 21.9899H22.8047V15.2848C22.4449 14.4444 21.1431 12.7858 18.4795 12.7858Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+const ICON2_SECTION =
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 28 28" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M14.9224 10.9545C15.2325 10.9549 15.4839 11.2068 15.4839 11.517V13.3803C15.4843 13.4142 15.5124 13.4418 15.5464 13.4418H28.3286C28.3625 13.4417 28.3898 13.4141 28.3901 13.3803V11.517C28.3901 11.2066 28.6422 10.9545 28.9526 10.9545H29.437C29.7472 10.9548 29.9985 11.2068 29.9985 11.517V13.3803C29.9989 13.4142 30.027 13.4418 30.061 13.4418H32.0532C32.3635 13.442 32.6157 13.694 32.6157 14.0043V14.4877C32.6155 14.7979 32.3634 15.0501 32.0532 15.0502H30.061C30.0269 15.0502 29.9988 15.0777 29.9985 15.1118V27.9926C29.999 28.0265 30.027 28.0541 30.061 28.0541H31.9956C32.3058 28.0544 32.5571 28.3064 32.5571 28.6166V29.1C32.5569 29.4101 32.3056 29.6623 31.9956 29.6625H30.061C30.0269 29.6625 29.9988 29.69 29.9985 29.7241V31.5571C29.9983 31.8671 29.747 32.1193 29.437 32.1196H28.9526C28.6424 32.1196 28.3904 31.8673 28.3901 31.5571V29.7241C28.3899 29.6901 28.3626 29.6627 28.3286 29.6625H15.5464C15.5123 29.6625 15.4841 29.69 15.4839 29.7241V31.4926C15.4836 31.8025 15.2323 32.0538 14.9224 32.0541H14.438C14.1278 32.0541 13.8758 31.8027 13.8755 31.4926V29.7241C13.8753 29.6901 13.8479 29.6627 13.814 29.6625H11.9468C11.6365 29.6625 11.3845 29.4102 11.3843 29.1V28.6166C11.3843 28.3062 11.6364 28.0541 11.9468 28.0541H13.814C13.8478 28.0539 13.8751 28.0264 13.8755 27.9926V15.1118C13.8752 15.0778 13.8479 15.0504 13.814 15.0502H11.9468C11.6365 15.0502 11.3845 14.7979 11.3843 14.4877V14.0043C11.3843 13.6939 11.6364 13.4418 11.9468 13.4418H13.814C13.8478 13.4416 13.8751 13.4141 13.8755 13.3803V11.517C13.8755 11.2066 14.1276 10.9545 14.438 10.9545H14.9224ZM15.5464 15.0502C15.5123 15.0502 15.4841 15.0777 15.4839 15.1118V27.9926C15.4843 28.0265 15.5124 28.0541 15.5464 28.0541H28.3286C28.3625 28.054 28.3897 28.0264 28.3901 27.9926V15.1118C28.3899 15.0778 28.3626 15.0504 28.3286 15.0502H15.5464Z" fill="currentColor" fill-opacity="0.8"/></svg>';
+
 const TOOLS: { id: ToolId; icon: string; label: string; key: string; svg?: string; sep?: boolean }[] = [
-	{ id: "select", icon: "mouse-pointer-2", label: "Select (V or Esc)", key: "v" },
-	{ id: "marquee", icon: "box-select", label: "Select area — drag to select (S)", key: "s", svg: ICON_MARQUEE_RECT },
-	{ id: "marker", icon: "pencil", label: "Marker (M)", key: "m", svg: ICON_MARKER, sep: true },
-	{ id: "highlight", icon: "highlighter", label: "Highlighter (H)", key: "h", svg: ICON_HIGHLIGHTER },
-	{ id: "tape", icon: "rectangle-horizontal", label: "Washi tape — drag a strip (W)", key: "w", svg: ICON_WASHI },
-	{ id: "erase", icon: "eraser", label: "Eraser — removes a whole stroke (E)", key: "e", svg: ICON_ERASER },
-	{ id: "card", icon: "file", label: "Card — drag to size (C)", key: "c", svg: ICON_CARD, sep: true },
-	{ id: "text", icon: "type", label: "Text — click to type (T)", key: "t", svg: ICON_TEXT, sep: true },
-	{ id: "table", icon: "table", label: "Table — drag to size (B)", key: "b", svg: ICON_TABLE },
-	{ id: "image", icon: "image", label: "Image — search or upload (I)", key: "i", svg: ICON_IMAGE },
-	{ id: "section", icon: "group", label: "Section — drag to group (G)", key: "g", svg: ICON_FRAME, sep: true },
+	{ id: "select", icon: "mouse-pointer-2", label: "Select (V or Esc)", key: "v", svg: ICON2_SELECT },
+	{ id: "marquee", icon: "box-select", label: "Select area — drag to select (S)", key: "s", svg: ICON2_MARQUEE },
+	{ id: "marker", icon: "pencil", label: "Marker (M)", key: "m", svg: ICON2_MARKER, sep: true },
+	{ id: "highlight", icon: "highlighter", label: "Highlighter (H)", key: "h", svg: ICON2_HIGHLIGHTER },
+	{ id: "tape", icon: "rectangle-horizontal", label: "Washi tape — drag a strip (W)", key: "w", svg: ICON2_TAPE },
+	{ id: "erase", icon: "eraser", label: "Eraser — removes a whole stroke (E)", key: "e", svg: ICON2_ERASER },
+	{ id: "card", icon: "file", label: "Card — drag to size (C)", key: "c", svg: ICON2_CARD, sep: true },
+	{ id: "text", icon: "type", label: "Text — click to type (T)", key: "t", svg: ICON2_TEXT, sep: true },
+	{ id: "table", icon: "table", label: "Table — drag to size (B)", key: "b", svg: ICON2_TABLE },
+	{ id: "image", icon: "image", label: "Image — search or upload (I)", key: "i", svg: ICON2_IMAGE },
+	{ id: "section", icon: "group", label: "Section — drag to group (G)", key: "g", svg: ICON2_SECTION, sep: true },
 ];
 
 const MARKER_MODES: { id: MarkerMode; icon: string; label: string; svg?: string }[] = [
-	{ id: "draw", icon: "pen-line", label: "Marker", svg: ICON_MARKER },
-	{ id: "highlight", icon: "highlighter", label: "Highlighter", svg: ICON_HIGHLIGHTER },
-	{ id: "tape", icon: "rectangle-horizontal", label: "Washi tape — drag a strip", svg: ICON_WASHI },
-	{ id: "erase", icon: "eraser", label: "Eraser — removes a whole stroke", svg: ICON_ERASER },
+	{ id: "draw", icon: "pen-line", label: "Marker", svg: ICON2_MARKER },
+	{ id: "highlight", icon: "highlighter", label: "Highlighter", svg: ICON2_HIGHLIGHTER },
+	{ id: "tape", icon: "rectangle-horizontal", label: "Washi tape — drag a strip", svg: ICON2_TAPE },
+	{ id: "erase", icon: "eraser", label: "Eraser — removes a whole stroke", svg: ICON2_ERASER },
 ];
 
 const CARD_MODES: { id: CardMode; icon: string; label: string; svg?: string }[] = [
@@ -636,9 +656,11 @@ class CanvasToolbar {
 
 		const wrapper = this.view.canvas!.wrapperEl;
 		this.barEl = wrapper.createDiv({ cls: "canvas-pencil-bar" });
+		// Islands: each group of tools sits in its own rounded card (per design).
+		let group: HTMLElement | null = null;
 		for (const t of TOOLS) {
-			if (t.sep) this.barEl.createDiv({ cls: "canvas-pencil-divider" });
-			const btn = this.barEl.createDiv({
+			if (!group || t.sep) group = this.barEl.createDiv({ cls: "canvas-pencil-group" });
+			const btn = group.createDiv({
 				cls: "canvas-pencil-tool",
 				attr: { "aria-label": t.label },
 			});
@@ -1268,12 +1290,12 @@ class CanvasToolbar {
 			if (!svg) {
 				wrap.setCssStyles({ cursor: "auto" });
 			} else if (mode === "erase") {
-				wrap.style.cursor = svgToCursor(svg, 12, 12, this.iconSizePx()); // upright
+				wrap.style.cursor = svgToCursor(svg, 14, 14, this.iconSizePx(), 0, 28); // upright
 			} else {
 				// Nib points southwest: washi sits at 30°; marker/highlighter are
 				// flipped a further 180° (their tip starts at the opposite end).
 				const rot = mode === "tape" ? 30 : 210;
-				wrap.style.cursor = svgToCursor(svg, 7, 21, this.iconSizePx(), rot);
+				wrap.style.cursor = svgToCursor(svg, 8, 24.5, this.iconSizePx(), rot, 28);
 			}
 			return;
 		}
@@ -1337,56 +1359,41 @@ class CanvasToolbar {
 			this.sizeSectionEl = sub.createDiv({
 				cls: "canvas-pencil-section canvas-pencil-size-inline",
 			});
-			const sliderWrap = this.sizeSectionEl.createDiv({ cls: "canvas-pencil-size-slider" });
-			const slider = sliderWrap.createEl("input", {
-				type: "range",
-				attr: { min: "2", max: "30", step: "1", "aria-label": "Stroke size" },
+			// Island 1: the 7 preset ticks (vertical bars; active gets a white chip).
+			const sliderIsland = this.sizeSectionEl.createDiv({
+				cls: "canvas-pencil-island canvas-pencil-size-slider",
 			});
-			slider.value = String(this.markerSize);
-			// Procreate-style presets: 7 tick marks on the track; clicking one (or
-			// dragging near one — magnetic) snaps the brush to that size.
-			const ticksEl = sliderWrap.createDiv({ cls: "canvas-pencil-size-ticks" });
+			// Island 2: live brush preview dot.
+			const previewIsland = this.sizeSectionEl.createDiv({
+				cls: "canvas-pencil-island canvas-pencil-size-previewbox",
+			});
+			const preview = previewIsland.createDiv({ cls: "canvas-pencil-size-preview" });
 			const tickEls = new Map<number, HTMLElement>();
-			const preview = this.sizeSectionEl.createDiv({ cls: "canvas-pencil-size-preview" });
 			const updatePreview = () => {
-				const d = Math.max(3, Math.min(26, this.markerSize));
+				const d = Math.round(4 + ((this.markerSize - 2) / 28) * 12);
 				preview.style.width = preview.style.height = `${d}px`;
 				for (const [p, el] of tickEls) el.toggleClass("is-active", p === this.markerSize);
 			};
-			const setSize = (v: number) => {
-				this.markerSize = v;
-				slider.value = String(v);
-				updatePreview();
-			};
 			for (const p of STROKE_PRESETS) {
-				const tick = ticksEl.createDiv({
-					cls: "canvas-pencil-size-tick",
+				const hit = sliderIsland.createDiv({
+					cls: "canvas-pencil-size-tick-hit",
 					attr: { "aria-label": `Size ${p}` },
 				});
-				tick.style.left = `${((p - 2) / 28) * 100}%`;
-				tick.addEventListener("pointerdown", (e) => {
+				hit.style.left = `${5 + ((p - 2) / 28) * 90}%`;
+				hit.createDiv({ cls: "canvas-pencil-size-tick" });
+				hit.addEventListener("pointerdown", (e) => {
 					e.stopPropagation();
 					e.preventDefault();
-					setSize(p);
+					this.markerSize = p;
+					updatePreview();
 				});
-				tickEls.set(p, tick);
+				tickEls.set(p, hit);
 			}
 			updatePreview();
-			slider.addEventListener("input", () => {
-				let v = Number(slider.value);
-				for (const p of STROKE_PRESETS) {
-					if (Math.abs(v - p) <= 1) {
-						v = p;
-						break;
-					}
-				}
-				setSize(v);
-			});
-			sub.createDiv({ cls: "canvas-pencil-divider" });
 		}
 
 		this.styleSectionEl = sub.createDiv({
-			cls: "canvas-pencil-section canvas-pencil-swatches",
+			cls: "canvas-pencil-section canvas-pencil-swatches canvas-pencil-island",
 		});
 		this.renderStyleSection();
 		this.applyScale();
@@ -1400,7 +1407,7 @@ class CanvasToolbar {
 			cls: "canvas-pencil-subbar",
 		}));
 		sub.addEventListener("pointerenter", () => this.overlay?.hideHint());
-		const modes = sub.createDiv({ cls: "canvas-pencil-section" });
+		const modes = sub.createDiv({ cls: "canvas-pencil-section canvas-pencil-island" });
 		const defs: { id: "rect" | "lasso"; icon: string; label: string; svg?: string }[] = [
 			{ id: "rect", icon: "box-select", label: "Rectangle select", svg: ICON_MARQUEE_RECT },
 			{ id: "lasso", icon: "lasso", label: "Freehand select", svg: ICON_LASSO },
@@ -1431,7 +1438,7 @@ class CanvasToolbar {
 			cls: "canvas-pencil-subbar",
 		}));
 		sub.addEventListener("pointerenter", () => this.overlay?.hideHint());
-		const modes = sub.createDiv({ cls: "canvas-pencil-section" });
+		const modes = sub.createDiv({ cls: "canvas-pencil-section canvas-pencil-island" });
 		for (const m of CARD_MODES) {
 			const btn = modes.createDiv({
 				cls: "canvas-pencil-mode canvas-pencil-mode-btn",
@@ -1866,21 +1873,29 @@ class CanvasToolbar {
 			this.renderCustomTapeSlot(el);
 		} else {
 			// Marker and highlighter keep separate palettes and remembered colors.
+			// Per design: [current color as a ring indicator] [preset dots] [wheel].
 			const highlight = this.markerMode === "highlight";
 			const palette = highlight ? HIGHLIGHT_PALETTE : PALETTE;
 			const current = highlight ? this.highlightColor : this.markerColor;
+			const indicator = el.createDiv({
+				cls: "canvas-pencil-color-current",
+				attr: { "aria-label": "Current color" },
+			});
+			const indicatorDot = indicator.createDiv({ cls: "canvas-pencil-color-current-dot" });
+			const showCurrent = (c: string) => {
+				indicator.style.borderColor = c;
+				indicatorDot.style.backgroundColor = c;
+			};
+			showCurrent(current);
 			const setColor = (c: string) => {
 				if (highlight) this.highlightColor = c;
 				else this.markerColor = c;
+				showCurrent(c);
 			};
 			for (const c of palette) {
 				const sw = el.createDiv({ cls: "canvas-pencil-swatch" });
 				sw.style.backgroundColor = c;
-				if (c.toLowerCase() === current.toLowerCase()) sw.addClass("is-active");
-				sw.addEventListener("click", () => {
-					setColor(c);
-					this.markStyleActive(el, sw);
-				});
+				sw.addEventListener("click", () => setColor(c));
 			}
 			const wheel = el.createDiv({
 				cls: "canvas-pencil-wheel",
@@ -1888,13 +1903,7 @@ class CanvasToolbar {
 			});
 			const picker = wheel.createEl("input", { type: "color" });
 			picker.value = /^#[0-9a-f]{6}$/i.test(current) ? current : "#1e1e1e";
-			picker.addEventListener("input", () => {
-				setColor(picker.value);
-				this.markStyleActive(el, wheel);
-			});
-			if (!palette.some((c) => c.toLowerCase() === current.toLowerCase())) {
-				this.markStyleActive(el, wheel);
-			}
+			picker.addEventListener("input", () => setColor(picker.value));
 		}
 	}
 

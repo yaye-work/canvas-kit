@@ -20,24 +20,42 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	z-index: 110;
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	padding: 6px 8px;
+	gap: 6px;
 	cursor: default; /* restore normal pointer over the bar, not the tool cursor */
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-l);
-	box-shadow: var(--shadow-s);
+}
+
+/* Islands: rounded cards holding each tool group / sub-bar segment. */
+.canvas-pencil-group,
+.canvas-pencil-island {
+	background: rgba(0, 0, 0, 0.05);
+	border-radius: 5px;
+}
+
+.theme-dark .canvas-pencil-group,
+.theme-dark .canvas-pencil-island {
+	background: rgba(255, 255, 255, 0.08);
+}
+
+.canvas-pencil-group {
+	display: flex;
+	align-items: center;
+	padding: 8px;
 }
 
 .canvas-pencil-tool {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 32px;
-	height: 32px;
-	border-radius: var(--radius-s);
+	width: 28px;
+	height: 28px;
+	border-radius: 3px;
 	cursor: pointer;
-	color: var(--text-muted);
+	color: var(--text-normal);
+}
+
+.canvas-pencil-tool svg {
+	width: 22px;
+	height: 22px;
 }
 
 .canvas-pencil-tool:hover {
@@ -61,13 +79,13 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	z-index: 110;
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	padding: 6px 12px;
+	gap: 6px;
 	cursor: default; /* restore normal pointer over the sub-bar, not the tool cursor */
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-l);
-	box-shadow: var(--shadow-s);
+}
+
+.canvas-pencil-section.canvas-pencil-island {
+	padding: 5px 8px;
+	min-height: 26px;
 }
 
 .canvas-pencil-section {
@@ -112,17 +130,34 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 /* color presets + tape pattern swatches */
 
 .canvas-pencil-swatches {
-	gap: 6px;
+	gap: 8px;
 }
 
 .canvas-pencil-swatch {
-	width: 18px;
-	height: 18px;
+	width: 12px;
+	height: 12px;
 	border-radius: 50%;
 	cursor: pointer;
-	border: 1px solid var(--background-modifier-border);
-	box-shadow: 0 0 0 2px transparent;
 	box-sizing: border-box;
+}
+
+/* Current color: ring + dot indicator (per design) */
+.canvas-pencil-color-current {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 17px;
+	height: 17px;
+	border-radius: 50%;
+	border: 1.4px solid var(--text-normal);
+	box-sizing: border-box;
+}
+
+.canvas-pencil-color-current-dot {
+	width: 11px;
+	height: 11px;
+	border-radius: 50%;
+	background: var(--text-normal);
 }
 
 .canvas-pencil-swatch.is-active,
@@ -135,8 +170,8 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 
 .canvas-pencil-wheel {
 	position: relative;
-	width: 18px;
-	height: 18px;
+	width: 12px;
+	height: 12px;
 	border-radius: 50%;
 	cursor: pointer;
 	background: conic-gradient(
@@ -1077,55 +1112,69 @@ body .canvas-wrapper .canvas-controls {
 /* ---- inline stroke-size slider in the draw sub-bar ---- */
 
 .canvas-pencil-size-inline {
-	gap: 8px;
+	gap: 6px;
 }
 
+/* Preset bars island (per design: 7 vertical pills; active gets a white chip) */
 .canvas-pencil-size-slider {
 	position: relative;
+	width: 156px;
+	height: 26px;
+}
+
+.canvas-pencil-size-tick-hit {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 18px;
+	transform: translateX(-50%);
 	display: flex;
 	align-items: center;
-}
-
-.canvas-pencil-size-slider input[type="range"] {
-	width: 160px;
-}
-
-/* thinner pill thumb */
-.canvas-pencil-size-slider input[type="range"]::-webkit-slider-thumb {
-	width: 9px;
-	height: 20px;
-	border-radius: 5px;
-}
-
-/* preset ticks along the track (inset to roughly match thumb travel) */
-.canvas-pencil-size-ticks {
-	position: absolute;
-	left: 8px;
-	right: 8px;
-	top: 50%;
-	height: 0;
-	pointer-events: none;
+	justify-content: center;
+	cursor: pointer;
 }
 
 .canvas-pencil-size-tick {
+	width: 4px;
+	height: 16px;
+	border-radius: 2px;
+	background: rgba(0, 0, 0, 0.4);
+}
+
+.theme-dark .canvas-pencil-size-tick {
+	background: rgba(255, 255, 255, 0.45);
+}
+
+.canvas-pencil-size-tick-hit:hover .canvas-pencil-size-tick {
+	background: var(--text-normal);
+}
+
+.canvas-pencil-size-tick-hit.is-active::before {
+	content: "";
 	position: absolute;
-	top: 0;
-	width: 5px;
-	height: 5px;
-	margin-left: -2.5px;
-	border-radius: 50%;
-	transform: translateY(-50%);
-	background: var(--text-faint);
-	cursor: pointer;
-	pointer-events: auto;
+	width: 13px;
+	height: 22px;
+	border-radius: 3px;
+	background: rgba(255, 255, 255, 0.8);
 }
 
-.canvas-pencil-size-tick:hover {
-	background: var(--text-muted);
+.theme-dark .canvas-pencil-size-tick-hit.is-active::before {
+	background: rgba(255, 255, 255, 0.18);
 }
 
-.canvas-pencil-size-tick.is-active {
+.canvas-pencil-size-tick-hit.is-active .canvas-pencil-size-tick {
+	position: relative;
 	background: var(--interactive-accent);
+}
+
+/* Brush preview island */
+.canvas-pencil-size-previewbox {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 33px;
+	height: 28px;
+	border-radius: 11px;
 }
 
 /* ---- lucide (stroked) icons keep the desktop stroke weight — mobile bumps
