@@ -1056,7 +1056,11 @@ body .canvas-wrapper .canvas-controls {
 
 /* ---- highlighter blends with what's underneath (real highlighter look) ---- */
 
+/* Matched by CONTENT (:has), so the blend applies the instant the stroke
+   renders — no JS sweep involved. The .canvas-pencil-highlight-ink class is
+   kept as a fallback and for pre-blend-era strokes (detected by opacity). */
 .canvas-node.canvas-pencil-highlight-ink,
+.canvas-node:has(svg.cp-ink-highlight),
 .canvas-pencil-overlay-marker.is-highlight canvas {
 	mix-blend-mode: multiply;
 }
@@ -1064,6 +1068,7 @@ body .canvas-wrapper .canvas-controls {
 /* Dark theme: multiply over a dark backdrop goes near-black — screen instead,
    which keeps light text readable through the stroke. */
 .theme-dark .canvas-node.canvas-pencil-highlight-ink,
+.theme-dark .canvas-node:has(svg.cp-ink-highlight),
 .theme-dark .canvas-pencil-overlay-marker.is-highlight canvas {
 	mix-blend-mode: screen;
 }
