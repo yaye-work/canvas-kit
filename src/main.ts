@@ -743,32 +743,36 @@ class CanvasToolbar {
 
 	private openSearchPanel() {
 		const wrap = this.view.canvas!.wrapperEl;
+		// One horizontal bar, centered at the bottom:
+		// [Done] [input] [count] [up] [down] [sections toggle]
 		const panel = (this.searchPanelEl = wrap.createDiv({ cls: "canvas-kit-search-panel" }));
 
-		const row = panel.createDiv({ cls: "canvas-kit-search-row" });
-		const input = (this.searchInputEl = row.createEl("input", {
+		const done = panel.createEl("button", { cls: "canvas-kit-search-done", text: "Done" });
+		done.addEventListener("click", () => this.closeSearch());
+
+		const input = (this.searchInputEl = panel.createEl("input", {
 			type: "text",
 			attr: { placeholder: "Search this canvas…", spellcheck: "false" },
 		}));
-		const prev = row.createDiv({
+		this.searchCountEl = panel.createDiv({ cls: "canvas-kit-search-count" });
+		const prev = panel.createDiv({
 			cls: "canvas-kit-search-nav",
 			attr: { "aria-label": "Previous match" },
 		});
 		setIcon(prev, "chevron-up");
-		const next = row.createDiv({
+		const next = panel.createDiv({
 			cls: "canvas-kit-search-nav",
 			attr: { "aria-label": "Next match" },
 		});
 		setIcon(next, "chevron-down");
-		const done = row.createEl("button", { cls: "canvas-kit-search-done", text: "Done" });
-		done.addEventListener("click", () => this.closeSearch());
 
-		const meta = panel.createDiv({ cls: "canvas-kit-search-meta" });
-		const toggle = meta.createEl("label", { cls: "canvas-kit-search-toggle" });
+		const toggle = panel.createEl("label", {
+			cls: "canvas-kit-search-toggle",
+			attr: { "aria-label": "Match section names only" },
+		});
 		const box = toggle.createEl("input", { type: "checkbox" });
 		box.checked = this.searchSectionsOnly;
-		toggle.appendText(" Section names only");
-		this.searchCountEl = meta.createDiv({ cls: "canvas-kit-search-count" });
+		toggle.appendText(" Sections");
 		this.searchStatusEl = panel.createDiv({ cls: "canvas-kit-search-status" });
 
 		const rerun = () => this.runSearch(input.value);
@@ -822,7 +826,7 @@ class CanvasToolbar {
 				if (!this.searchPanelEl) return;
 				const wrapRect = wrap.getBoundingClientRect();
 				const covered = Math.max(0, wrapRect.bottom - (vv.offsetTop + vv.height));
-				this.searchPanelEl.style.bottom = `${72 + covered}px`;
+				this.searchPanelEl.style.bottom = `${18 + covered}px`;
 			};
 			vv.addEventListener("resize", adjust);
 			vv.addEventListener("scroll", adjust);
