@@ -21,7 +21,6 @@ interface CanvasPencilSettings {
 	textSize: number; // starting font size for new text (in canvas units)
 	hideBottomBar: boolean; // hide Obsidian's bottom add-to-canvas bar (.canvas-card-menu)
 	toolbarScale: number; // scale factor for Canvas Kit's own toolbar (1 = default)
-	pinDrawSubbar: boolean; // keep the draw sub-toolbar visible in every mode
 	myscriptAppKey: string; // MyScript Cloud application key (handwriting → text)
 	myscriptHmacKey: string; // MyScript Cloud HMAC key
 	recognitionLang: string; // MyScript recognition language, e.g. en_US
@@ -33,8 +32,7 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	tapeImage: null,
 	textSize: 20,
 	hideBottomBar: false,
-	toolbarScale: 1,
-	pinDrawSubbar: false,
+	toolbarScale: 2,
 	myscriptAppKey: "",
 	myscriptHmacKey: "",
 	recognitionLang: "en_US",
@@ -319,8 +317,27 @@ interface CanvasViewLike extends ItemView {
 	canvas?: CanvasLike;
 }
 
-type ToolId = "select" | "marquee" | "marker" | "text" | "card" | "section" | "table" | "image";
+type ToolId =
+	| "select"
+	| "marquee"
+	| "marker"
+	| "highlight"
+	| "tape"
+	| "erase"
+	| "text"
+	| "card"
+	| "section"
+	| "table"
+	| "image";
 type MarkerMode = "draw" | "highlight" | "tape" | "erase";
+
+/** Draw tools live directly on the main toolbar; each maps to a marker mode. */
+const DRAW_TOOL_MODE: Partial<Record<ToolId, MarkerMode>> = {
+	marker: "draw",
+	highlight: "highlight",
+	tape: "tape",
+	erase: "erase",
+};
 type CardMode = "empty" | "new" | "existing";
 
 // ---------- Plugin ----------
@@ -425,10 +442,6 @@ export default class CanvasPencilPlugin extends Plugin {
 		for (const tb of this.toolbars.values()) tb.applyScale();
 	}
 
-	/** Re-apply the pinned-subbar setting to every live canvas toolbar. */
-	applySubbarPin() {
-		for (const tb of this.toolbars.values()) tb.applySubbarPin();
-	}
 
 	/** The toolbar attached to a given canvas instance (menus hand us the canvas). */
 	toolbarFor(canvas: CanvasLike | undefined): CanvasToolbar | null {
@@ -538,15 +551,18 @@ const ICON_CARD_EMPTY = filledMulti("M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.
 const ICON_CARD_NEW = filledMulti("M9.95 12c.28 0 .5.22.5.5v2.3c0 .27.22.5.5.5h2.29c.28 0 .5.21.5.5v.34a.5.5 0 0 1-.5.5h-2.3a.5.5 0 0 0-.5.5v2.29a.5.5 0 0 1-.5.5H9.6a.5.5 0 0 1-.5-.5v-2.3a.5.5 0 0 0-.5-.5H6.31a.5.5 0 0 1-.5-.5v-.34c0-.28.23-.5.5-.5h2.3a.5.5 0 0 0 .5-.5V12.5c0-.28.22-.5.5-.5z", "M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.51v11.94c0 .42-.34.76-.76.76H3.51a.76.76 0 0 1-.76-.76V2.4c0-.42.34-.76.76-.76zM4.53 3.17a.26.26 0 0 0-.26.26v17.36c0 .14.12.26.26.26h14.94c.14 0 .26-.12.26-.26v-9.55a.26.26 0 0 0-.26-.27h-5.73c-.7 0-1.28-.57-1.28-1.27V3.43a.26.26 0 0 0-.26-.26z");
 const ICON_CARD_EXISTING = filledMulti("M8.13 11.82a3.3 3.3 0 0 1 3.97 4.42.6.6 0 0 0 .11.64l1.4 1.35c.21.2.22.52.02.73l-.36.37a.5.5 0 0 1-.72 0l-1.38-1.32a.6.6 0 0 0-.65-.08 3.28 3.28 0 0 1-4.6-2.02 3.3 3.3 0 0 1 2.21-4.1m2.62 2.65a1.75 1.75 0 1 0-3.36 1 1.75 1.75 0 0 0 3.36-1", "M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.51v11.94c0 .42-.34.76-.76.76H3.51a.76.76 0 0 1-.76-.76V2.4c0-.42.34-.76.76-.76zM4.53 3.17a.26.26 0 0 0-.26.26v17.36c0 .14.12.26.26.26h14.94c.14 0 .26-.12.26-.26v-9.55a.26.26 0 0 0-.26-.27h-5.73c-.7 0-1.28-.57-1.28-1.27V3.43a.26.26 0 0 0-.26-.26z");
 
-const TOOLS: { id: ToolId; icon: string; label: string; key: string; svg?: string }[] = [
+const TOOLS: { id: ToolId; icon: string; label: string; key: string; svg?: string; sep?: boolean }[] = [
 	{ id: "select", icon: "mouse-pointer-2", label: "Select (V or Esc)", key: "v" },
 	{ id: "marquee", icon: "box-select", label: "Select area — drag to select (S)", key: "s" },
-	{ id: "marker", icon: "pencil", label: "Draw tools (M)", key: "m", svg: ICON_MARKER },
-	{ id: "text", icon: "type", label: "Text — click to type (T)", key: "t", svg: ICON_TEXT },
-	{ id: "card", icon: "file", label: "Card — drag to size (C)", key: "c", svg: ICON_CARD },
-	{ id: "section", icon: "group", label: "Section — drag to group (G)", key: "g", svg: ICON_FRAME },
+	{ id: "marker", icon: "pencil", label: "Marker (M)", key: "m", svg: ICON_MARKER, sep: true },
+	{ id: "highlight", icon: "highlighter", label: "Highlighter (H)", key: "h", svg: ICON_HIGHLIGHTER },
+	{ id: "tape", icon: "rectangle-horizontal", label: "Washi tape — drag a strip (W)", key: "w", svg: ICON_WASHI },
+	{ id: "erase", icon: "eraser", label: "Eraser — removes a whole stroke (E)", key: "e", svg: ICON_ERASER },
+	{ id: "card", icon: "file", label: "Card — drag to size (C)", key: "c", svg: ICON_CARD, sep: true },
+	{ id: "text", icon: "type", label: "Text — click to type (T)", key: "t", svg: ICON_TEXT, sep: true },
 	{ id: "table", icon: "table", label: "Table — drag to size (B)", key: "b", svg: ICON_TABLE },
 	{ id: "image", icon: "image", label: "Image — search or upload (I)", key: "i", svg: ICON_IMAGE },
+	{ id: "section", icon: "group", label: "Section — drag to group (G)", key: "g", svg: ICON_FRAME, sep: true },
 ];
 
 const MARKER_MODES: { id: MarkerMode; icon: string; label: string; svg?: string }[] = [
@@ -565,6 +581,7 @@ const CARD_MODES: { id: CardMode; icon: string; label: string; svg?: string }[] 
 class CanvasToolbar {
 	tool: ToolId = "select";
 	markerMode: MarkerMode = "draw";
+	marqueeMode: "rect" | "lasso" = "rect";
 	cardMode: CardMode = "empty";
 	/** Flow A: the note chosen in "Existing note" mode, waiting to be placed by a drag. */
 	pendingExistingFile: TFile | null = null;
@@ -605,6 +622,7 @@ class CanvasToolbar {
 		const wrapper = this.view.canvas!.wrapperEl;
 		this.barEl = wrapper.createDiv({ cls: "canvas-pencil-bar" });
 		for (const t of TOOLS) {
+			if (t.sep) this.barEl.createDiv({ cls: "canvas-pencil-divider" });
 			const btn = this.barEl.createDiv({
 				cls: "canvas-pencil-tool",
 				attr: { "aria-label": t.label },
@@ -615,7 +633,6 @@ class CanvasToolbar {
 			this.buttons.set(t.id, btn);
 		}
 		this.buttons.get("select")!.addClass("is-active");
-		this.updateMarkerToolIcon();
 		this.applyScale();
 		// Hovering the toolbar hides the cursor-following hint so it doesn't overlap.
 		this.barEl.addEventListener("pointerenter", () => this.overlay?.hideHint());
@@ -689,7 +706,6 @@ class CanvasToolbar {
 		this.doc.addEventListener("contextmenu", this.contextmenuHandler, true);
 
 		this.bindUndoGestures();
-		if (this.plugin.settings.pinDrawSubbar) this.showMarkerSubBar();
 		this.refreshNodeStyles();
 	}
 
@@ -783,11 +799,17 @@ class CanvasToolbar {
 		});
 	}
 
-	/** Scale the toolbar per the user's setting (anchored top-center). */
+	/** Scale the toolbar + sub-bar per the user's setting (anchored top-center). */
 	applyScale() {
 		const s = this.plugin.settings.toolbarScale || 1;
 		this.barEl.setCssStyles({ transformOrigin: "top center" });
 		this.barEl.style.transform = `translateX(-50%) scale(${s})`;
+		if (this.subBarEl) {
+			this.subBarEl.setCssStyles({ transformOrigin: "top center" });
+			this.subBarEl.style.transform = `translateX(-50%) scale(${s})`;
+			// Sit just below the scaled main bar (unscaled bar height ≈ 46px).
+			this.subBarEl.style.top = `${16 + Math.round(46 * s) + 10}px`;
+		}
 	}
 
 	setTool(tool: ToolId) {
@@ -802,14 +824,16 @@ class CanvasToolbar {
 
 		this.tool = tool;
 		for (const [id, btn] of this.buttons) btn.toggleClass("is-active", id === tool);
-		this.updateMarkerToolIcon();
-		this.applyToolCursor();
 
-		if (tool === "marker") {
+		const mode = DRAW_TOOL_MODE[tool];
+		if (mode) {
+			this.markerMode = mode;
 			this.overlay = new MarkerOverlay(this);
-			this.showMarkerSubBar();
+			// Eraser has neither stroke width nor style — no sub-bar for it.
+			if (mode !== "erase") this.showMarkerSubBar();
 		} else if (tool === "marquee") {
 			this.overlay = new MarqueeSelectOverlay(this);
+			this.showMarqueeSubBar();
 		} else if (tool === "text") {
 			this.overlay = new TextEditOverlay(this);
 		} else if (tool === "card") {
@@ -818,26 +842,10 @@ class CanvasToolbar {
 		} else if (tool === "image") {
 			this.overlay = new DragCreateOverlay(this, "image");
 			this.openImagePicker();
-		} else if (tool !== "select") {
+		} else if (tool === "section" || tool === "table") {
 			this.overlay = new DragCreateOverlay(this, tool);
 		}
-		// Pinned draw kit: keep the marker sub-toolbar up in modes that don't
-		// bring their own sub-bar (select, marquee, text, section, table, image).
-		if (!this.subBarEl && this.plugin.settings.pinDrawSubbar) this.showMarkerSubBar();
-	}
-
-	/**
-	 * The first toolbar button always shows the LAST-USED draw sub-mode (marker /
-	 * highlighter / washi / eraser) — there's no separate "draw kit" icon. So on a
-	 * fresh canvas it shows the marker, and it remembers whatever the user last
-	 * picked even after switching to other tools.
-	 */
-	private updateMarkerToolIcon() {
-		const btn = this.buttons.get("marker");
-		if (!btn) return;
-		const mode = MARKER_MODES.find((m) => m.id === this.markerMode);
-		if (mode?.svg) setSvg(btn, mode.svg);
-		else setIcon(btn, mode?.icon ?? "pencil");
+		this.applyToolCursor();
 	}
 
 	/**
@@ -847,16 +855,17 @@ class CanvasToolbar {
 	 */
 	private applyToolCursor() {
 		const wrap = this.view.canvas!.wrapperEl;
-		if (this.tool === "marker") {
-			const svg = MARKER_MODES.find((m) => m.id === this.markerMode)?.svg;
+		const mode = DRAW_TOOL_MODE[this.tool];
+		if (mode) {
+			const svg = MARKER_MODES.find((m) => m.id === mode)?.svg;
 			if (!svg) {
 				wrap.setCssStyles({ cursor: "auto" });
-			} else if (this.markerMode === "erase") {
+			} else if (mode === "erase") {
 				wrap.style.cursor = svgToCursor(svg, 12, 12, this.iconSizePx()); // upright
 			} else {
 				// Nib points southwest: washi sits at 30°; marker/highlighter are
 				// flipped a further 180° (their tip starts at the opposite end).
-				const rot = this.markerMode === "tape" ? 30 : 210;
+				const rot = mode === "tape" ? 30 : 210;
 				wrap.style.cursor = svgToCursor(svg, 7, 21, this.iconSizePx(), rot);
 			}
 			return;
@@ -872,40 +881,10 @@ class CanvasToolbar {
 		return w >= 8 ? Math.round(w) : 18;
 	}
 
-	setMarkerMode(mode: MarkerMode) {
-		this.markerMode = mode;
-		this.updateMarkerToolIcon();
-		(this.overlay as MarkerOverlay | null)?.onModeChange?.();
-		this.subBarEl
-			?.querySelectorAll(".canvas-pencil-mode-btn")
-			.forEach((el, i) => el.toggleClass("is-active", MARKER_MODES[i].id === mode));
-		this.renderStyleSection();
-		this.applyToolCursor();
-
-		// Eraser greys out size + style; washi tape only greys out the size slider
-		// (its width comes from the drag, not the stroke size).
-		const sizeDisabled = mode === "erase" || mode === "tape";
-		const styleDisabled = mode === "erase";
-		this.sizeSectionEl?.toggleClass("is-disabled", sizeDisabled);
-		this.styleSectionEl?.toggleClass("is-disabled", styleDisabled);
-		if (sizeDisabled) {
-			this.sizePopupEl?.remove();
-			this.sizePopupEl = null;
-		}
-	}
-
 	revertToSelect() {
 		this.setTool("select");
 	}
 
-	/** Sync the sub-toolbar with the pinned-draw-kit setting without a reload. */
-	applySubbarPin() {
-		const pin = this.plugin.settings.pinDrawSubbar;
-		if (pin && !this.subBarEl) this.showMarkerSubBar();
-		else if (!pin && this.subBarEl && this.tool !== "marker" && this.tool !== "card") {
-			this.hideSubBar();
-		}
-	}
 
 	/**
 	 * iPad: the on-screen keyboard scrolls the app (window and/or workspace
@@ -929,57 +908,68 @@ class CanvasToolbar {
 		window.setTimeout(pin, 700);
 	}
 
-	// --- marker sub toolbar: [modes] | [size] | [colors or tape patterns] ---
+	// --- draw sub toolbar: [size] | [colors or tape patterns] ---
 
 	private showMarkerSubBar() {
+		this.hideSubBar();
 		const sub = (this.subBarEl = this.view.canvas!.wrapperEl.createDiv({
 			cls: "canvas-pencil-subbar",
 		}));
 		sub.addEventListener("pointerenter", () => this.overlay?.hideHint());
 
-		const modes = sub.createDiv({ cls: "canvas-pencil-section" });
-		for (const m of MARKER_MODES) {
-			const btn = modes.createDiv({
-				cls: "canvas-pencil-mode canvas-pencil-mode-btn",
-				attr: { "aria-label": m.label },
+		// Tape has no stroke width — its thickness comes from the drag.
+		if (this.markerMode !== "tape") {
+			this.sizeSectionEl = sub.createDiv({ cls: "canvas-pencil-section" });
+			const sizeBtn = this.sizeSectionEl.createDiv({
+				cls: "canvas-pencil-mode",
+				attr: { "aria-label": "Stroke size" },
 			});
-			if (m.svg) setSvg(btn, m.svg);
-			else setIcon(btn, m.icon);
-			if (m.id === this.markerMode) btn.addClass("is-active");
-			btn.addEventListener("click", () => {
-				// From the pinned sub-bar, picking a mode also enters the draw tool.
-				if (this.tool !== "marker") this.setTool("marker");
-				this.setMarkerMode(m.id);
-			});
+			setIcon(sizeBtn, "sliders-horizontal");
+			sizeBtn.addEventListener("click", () => this.toggleSizePopup(sizeBtn));
+			sub.createDiv({ cls: "canvas-pencil-divider" });
 		}
-
-		sub.createDiv({ cls: "canvas-pencil-divider" });
-
-		this.sizeSectionEl = sub.createDiv({ cls: "canvas-pencil-section" });
-		const sizeBtn = this.sizeSectionEl.createDiv({
-			cls: "canvas-pencil-mode",
-			attr: { "aria-label": "Stroke size" },
-		});
-		setIcon(sizeBtn, "sliders-horizontal");
-		sizeBtn.addEventListener("click", () => this.toggleSizePopup(sizeBtn));
-
-		sub.createDiv({ cls: "canvas-pencil-divider" });
 
 		this.styleSectionEl = sub.createDiv({
 			cls: "canvas-pencil-section canvas-pencil-swatches",
 		});
 		this.renderStyleSection();
+		this.applyScale();
+	}
 
-		// Apply the remembered mode's disabled state up front — eraser has no stroke
-		// width (and no color), tape has no stroke width.
-		const sizeDisabled = this.markerMode === "erase" || this.markerMode === "tape";
-		this.sizeSectionEl.toggleClass("is-disabled", sizeDisabled);
-		this.styleSectionEl.toggleClass("is-disabled", this.markerMode === "erase");
+	// --- marquee sub toolbar: [rectangle | freehand lasso] ---
+
+	private showMarqueeSubBar() {
+		this.hideSubBar();
+		const sub = (this.subBarEl = this.view.canvas!.wrapperEl.createDiv({
+			cls: "canvas-pencil-subbar",
+		}));
+		sub.addEventListener("pointerenter", () => this.overlay?.hideHint());
+		const modes = sub.createDiv({ cls: "canvas-pencil-section" });
+		const defs: { id: "rect" | "lasso"; icon: string; label: string }[] = [
+			{ id: "rect", icon: "box-select", label: "Rectangle select" },
+			{ id: "lasso", icon: "lasso", label: "Freehand select" },
+		];
+		for (const m of defs) {
+			const btn = modes.createDiv({
+				cls: "canvas-pencil-mode canvas-pencil-mode-btn",
+				attr: { "aria-label": m.label },
+			});
+			setIcon(btn, m.icon);
+			if (m.id === this.marqueeMode) btn.addClass("is-active");
+			btn.addEventListener("click", () => {
+				this.marqueeMode = m.id;
+				modes
+					.querySelectorAll(".canvas-pencil-mode-btn")
+					.forEach((el, i) => el.toggleClass("is-active", defs[i].id === m.id));
+			});
+		}
+		this.applyScale();
 	}
 
 	// --- card sub toolbar: [empty | new note | existing note] ---
 
 	private showCardSubBar() {
+		this.hideSubBar();
 		const sub = (this.subBarEl = this.view.canvas!.wrapperEl.createDiv({
 			cls: "canvas-pencil-subbar",
 		}));
@@ -995,6 +985,7 @@ class CanvasToolbar {
 			if (m.id === this.cardMode) btn.addClass("is-active");
 			btn.addEventListener("click", () => this.setCardMode(m.id));
 		}
+		this.applyScale();
 	}
 
 	setCardMode(mode: CardMode) {
@@ -2695,6 +2686,10 @@ class MarqueeSelectOverlay extends ToolOverlay {
 	private moveOrig: Map<CanvasNodeLike, { x: number; y: number; w: number; h: number }> | null =
 		null;
 	private moved = false;
+	/** Freehand lasso trail (world coords for hit-testing, client for preview). */
+	private lassoWorld: { x: number; y: number }[] | null = null;
+	private lassoSvg: SVGSVGElement | null = null;
+	private lassoLine: SVGPolylineElement | null = null;
 
 	constructor(tb: CanvasToolbar) {
 		super(tb, "canvas-pencil-overlay-section");
@@ -2733,8 +2728,13 @@ class MarqueeSelectOverlay extends ToolOverlay {
 				);
 			} else {
 				this.clearSelection();
-				this.start = { x: e.clientX, y: e.clientY };
-				this.startWorld = w;
+				if (this.tb.marqueeMode === "lasso") {
+					this.lassoWorld = [w];
+					this.beginLassoPreview(e);
+				} else {
+					this.start = { x: e.clientX, y: e.clientY };
+					this.startWorld = w;
+				}
 			}
 			e.preventDefault();
 		});
@@ -2753,6 +2753,11 @@ class MarqueeSelectOverlay extends ToolOverlay {
 						height: o.h,
 					});
 				}
+				return;
+			}
+			if (this.lassoWorld) {
+				this.lassoWorld.push(this.worldFromClient(e.clientX, e.clientY));
+				this.extendLassoPreview(e);
 				return;
 			}
 			const r = this.el.getBoundingClientRect();
@@ -2774,6 +2779,10 @@ class MarqueeSelectOverlay extends ToolOverlay {
 		this.el.addEventListener("pointerup", (e) => {
 			if (this.moveStartWorld) {
 				this.endMove(e);
+				return;
+			}
+			if (this.lassoWorld) {
+				this.finishLasso();
 				return;
 			}
 			if (!this.start || !this.startWorld) return;
@@ -2854,6 +2863,75 @@ class MarqueeSelectOverlay extends ToolOverlay {
 		this.canvas.deselectAll?.();
 	}
 
+	// --- freehand lasso ---
+
+	private beginLassoPreview(e: PointerEvent) {
+		const doc = this.el.ownerDocument;
+		const NS = "http://www.w3.org/2000/svg";
+		const svg = doc.createElementNS(NS, "svg");
+		svg.classList.add("canvas-pencil-lasso");
+		const line = doc.createElementNS(NS, "polyline");
+		svg.appendChild(line);
+		this.el.appendChild(svg);
+		this.lassoSvg = svg;
+		this.lassoLine = line;
+		this.extendLassoPreview(e);
+	}
+
+	private extendLassoPreview(e: PointerEvent) {
+		if (!this.lassoLine) return;
+		const r = this.el.getBoundingClientRect();
+		const pts = this.lassoLine.getAttribute("points") ?? "";
+		this.lassoLine.setAttribute(
+			"points",
+			`${pts} ${Math.round(e.clientX - r.left)},${Math.round(e.clientY - r.top)}`.trim()
+		);
+	}
+
+	private finishLasso() {
+		const poly = this.lassoWorld;
+		this.lassoWorld = null;
+		this.lassoSvg?.remove();
+		this.lassoSvg = this.lassoLine = null;
+		if (!poly || poly.length < 3) {
+			this.clearSelection();
+			return;
+		}
+		let minX = Infinity;
+		let minY = Infinity;
+		let maxX = -Infinity;
+		let maxY = -Infinity;
+		for (const p of poly) {
+			minX = Math.min(minX, p.x);
+			minY = Math.min(minY, p.y);
+			maxX = Math.max(maxX, p.x);
+			maxY = Math.max(maxY, p.y);
+		}
+		if (maxX - minX < 4 && maxY - minY < 4) {
+			this.clearSelection();
+			return;
+		}
+		const canvas = this.canvas;
+		let nodes: CanvasNodeLike[] = [];
+		try {
+			nodes = (canvas.getIntersectingNodes?.({ minX, minY, maxX, maxY }) ?? []).filter((n) =>
+				bboxTouchesPolygon(
+					{ x: n.x ?? 0, y: n.y ?? 0, w: n.width ?? 0, h: n.height ?? 0 },
+					poly
+				)
+			);
+		} catch (err) {
+			console.warn("Canvas Kit: lasso hit test failed", err);
+		}
+		if (nodes.length && typeof canvas.selectAll === "function") {
+			canvas.selectAll(nodes);
+			this.selected = nodes;
+			this.updateSelBox();
+		} else {
+			this.clearSelection();
+		}
+	}
+
 	/** Second finger landed — this is a pan/zoom; abandon drag or move. */
 	protected onGestureStart() {
 		if (this.moveStartWorld) {
@@ -2873,6 +2951,9 @@ class MarqueeSelectOverlay extends ToolOverlay {
 			this.moved = false;
 		}
 		this.start = this.startWorld = null;
+		this.lassoWorld = null;
+		this.lassoSvg?.remove();
+		this.lassoSvg = this.lassoLine = null;
 		this.rectEl.hide();
 		this.hintEl.hide();
 	}
@@ -2880,6 +2961,42 @@ class MarqueeSelectOverlay extends ToolOverlay {
 	hideHint() {
 		this.hintEl.hide();
 	}
+}
+
+/** Ray-cast point-in-polygon. */
+function pointInPolygon(x: number, y: number, poly: { x: number; y: number }[]): boolean {
+	let inside = false;
+	for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+		const xi = poly[i].x;
+		const yi = poly[i].y;
+		const xj = poly[j].x;
+		const yj = poly[j].y;
+		if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+	}
+	return inside;
+}
+
+/** Loose lasso hit: any box corner/center inside the polygon, or any polygon
+ *  vertex inside the box. (Skips exact edge-crossing math — good enough for
+ *  hand-drawn lassos.) */
+function bboxTouchesPolygon(
+	box: { x: number; y: number; w: number; h: number },
+	poly: { x: number; y: number }[]
+): boolean {
+	const probes = [
+		[box.x, box.y],
+		[box.x + box.w, box.y],
+		[box.x, box.y + box.h],
+		[box.x + box.w, box.y + box.h],
+		[box.x + box.w / 2, box.y + box.h / 2],
+	];
+	for (const [px, py] of probes) if (pointInPolygon(px, py, poly)) return true;
+	for (const p of poly) {
+		if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) {
+			return true;
+		}
+	}
+	return false;
 }
 
 // --- Drag-create tools: card / table / section (anchor at pointer-down corner) ---
@@ -4454,26 +4571,13 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 			.setDesc("Scale Canvas Kit's toolbar. 100% is the default size.")
 			.addSlider((s) =>
 				s
-					.setLimits(70, 160, 5)
+					.setLimits(70, 300, 10)
 					.setValue(Math.round((this.plugin.settings.toolbarScale || 1) * 100))
 					.onChange(async (v) => {
 						this.plugin.settings.toolbarScale = v / 100;
 						await this.plugin.saveSettings();
 						this.plugin.applyToolbarScale();
 					})
-			);
-
-		new Setting(containerEl)
-			.setName("Always show draw sub-toolbar")
-			.setDesc(
-				"Keep the draw kit (marker / highlighter / tape / eraser + colors) visible in every mode. Picking a sub-tool from it activates drawing."
-			)
-			.addToggle((t) =>
-				t.setValue(this.plugin.settings.pinDrawSubbar).onChange(async (v) => {
-					this.plugin.settings.pinDrawSubbar = v;
-					await this.plugin.saveSettings();
-					this.plugin.applySubbarPin();
-				})
 			);
 
 		new Setting(containerEl)

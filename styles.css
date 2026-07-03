@@ -1035,3 +1035,21 @@ body .canvas-wrapper .canvas-controls {
 		opacity: 0.35;
 	}
 }
+
+/* ---- freehand lasso preview ---- */
+
+.canvas-pencil-lasso {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+.canvas-pencil-lasso polyline {
+	fill: hsla(var(--interactive-accent-hsl), 0.08);
+	stroke: var(--interactive-accent);
+	stroke-width: 1.5;
+	stroke-dasharray: 5 4;
+	stroke-linejoin: round;
+}
