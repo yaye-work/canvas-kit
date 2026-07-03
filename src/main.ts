@@ -1388,14 +1388,21 @@ class CanvasToolbar {
 				type: "range",
 				attr: { min: "0", max: "1000", step: "1", "aria-label": "Stroke size" },
 			});
+			// The chip "thumb" is OUR element (the native one is invisible), placed
+			// with the exact same math as the ticks — it can't drift or misalign.
+			const chip = sliderIsland.createDiv({ cls: "canvas-pencil-size-chip" });
 			STROKE_PRESETS.forEach((p, i) => {
 				const tick = sliderIsland.createDiv({ cls: "canvas-pencil-size-tick" });
 				tick.style.left = `${THUMB_W / 2 + strokeIdxToT(i) * span}px`;
 				tickEls.set(p, tick);
 			});
+			const placeChip = () => {
+				chip.style.left = `${THUMB_W / 2 + (Number(slider.value) / 1000) * span}px`;
+			};
 			const size2i = (size: number) => (size - STROKE_MIN) / 8;
 			this.markerSize = Math.max(STROKE_MIN, Math.min(STROKE_MAX, this.markerSize));
 			slider.value = String(Math.round(strokeIdxToT(size2i(this.markerSize)) * 1000));
+			placeChip();
 			slider.addEventListener("input", () => {
 				const t = Number(slider.value) / 1000;
 				let i = strokeTToIdx(t);
@@ -1405,6 +1412,7 @@ class CanvasToolbar {
 					slider.value = String(Math.round(strokeIdxToT(nearest) * 1000));
 				}
 				this.markerSize = Math.round(STROKE_MIN + i * 8);
+				placeChip();
 				updatePreview();
 			});
 			updatePreview();
