@@ -555,9 +555,17 @@ const ICON_CARD_EMPTY = filledMulti("M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.
 const ICON_CARD_NEW = filledMulti("M9.95 12c.28 0 .5.22.5.5v2.3c0 .27.22.5.5.5h2.29c.28 0 .5.21.5.5v.34a.5.5 0 0 1-.5.5h-2.3a.5.5 0 0 0-.5.5v2.29a.5.5 0 0 1-.5.5H9.6a.5.5 0 0 1-.5-.5v-2.3a.5.5 0 0 0-.5-.5H6.31a.5.5 0 0 1-.5-.5v-.34c0-.28.23-.5.5-.5h2.3a.5.5 0 0 0 .5-.5V12.5c0-.28.22-.5.5-.5z", "M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.51v11.94c0 .42-.34.76-.76.76H3.51a.76.76 0 0 1-.76-.76V2.4c0-.42.34-.76.76-.76zM4.53 3.17a.26.26 0 0 0-.26.26v17.36c0 .14.12.26.26.26h14.94c.14 0 .26-.12.26-.26v-9.55a.26.26 0 0 0-.26-.27h-5.73c-.7 0-1.28-.57-1.28-1.27V3.43a.26.26 0 0 0-.26-.26z");
 const ICON_CARD_EXISTING = filledMulti("M8.13 11.82a3.3 3.3 0 0 1 3.97 4.42.6.6 0 0 0 .11.64l1.4 1.35c.21.2.22.52.02.73l-.36.37a.5.5 0 0 1-.72 0l-1.38-1.32a.6.6 0 0 0-.65-.08 3.28 3.28 0 0 1-4.6-2.02 3.3 3.3 0 0 1 2.21-4.1m2.62 2.65a1.75 1.75 0 1 0-3.36 1 1.75 1.75 0 0 0 3.36-1", "M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.51v11.94c0 .42-.34.76-.76.76H3.51a.76.76 0 0 1-.76-.76V2.4c0-.42.34-.76.76-.76zM4.53 3.17a.26.26 0 0 0-.26.26v17.36c0 .14.12.26.26.26h14.94c.14 0 .26-.12.26-.26v-9.55a.26.26 0 0 0-.26-.27h-5.73c-.7 0-1.28-.57-1.28-1.27V3.43a.26.26 0 0 0-.26-.26z");
 
+// Marquee icons (designed): dashed rectangle + freehand lasso loop.
+const ICON_MARQUEE_RECT = svgIcon(
+	'<rect x="1.78" y="3.04" width="20.85" height="18.46" rx="1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 3"/>'
+);
+const ICON_LASSO = svgIcon(
+	'<path d="M5.09694 7.51559C8.66525 2.11427 14.4902 1.35926 17.9953 3.09314C26.7806 7.4389 15.9828 23.2599 7.7552 21.9767C-0.472421 20.6936 4.04478 10.9036 12.1508 6.9996" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2.5"/>'
+);
+
 const TOOLS: { id: ToolId; icon: string; label: string; key: string; svg?: string; sep?: boolean }[] = [
 	{ id: "select", icon: "mouse-pointer-2", label: "Select (V or Esc)", key: "v" },
-	{ id: "marquee", icon: "box-select", label: "Select area — drag to select (S)", key: "s" },
+	{ id: "marquee", icon: "box-select", label: "Select area — drag to select (S)", key: "s", svg: ICON_MARQUEE_RECT },
 	{ id: "marker", icon: "pencil", label: "Marker (M)", key: "m", svg: ICON_MARKER, sep: true },
 	{ id: "highlight", icon: "highlighter", label: "Highlighter (H)", key: "h", svg: ICON_HIGHLIGHTER },
 	{ id: "tape", icon: "rectangle-horizontal", label: "Washi tape — drag a strip (W)", key: "w", svg: ICON_WASHI },
@@ -1359,16 +1367,17 @@ class CanvasToolbar {
 		}));
 		sub.addEventListener("pointerenter", () => this.overlay?.hideHint());
 		const modes = sub.createDiv({ cls: "canvas-pencil-section" });
-		const defs: { id: "rect" | "lasso"; icon: string; label: string }[] = [
-			{ id: "rect", icon: "box-select", label: "Rectangle select" },
-			{ id: "lasso", icon: "lasso", label: "Freehand select" },
+		const defs: { id: "rect" | "lasso"; icon: string; label: string; svg?: string }[] = [
+			{ id: "rect", icon: "box-select", label: "Rectangle select", svg: ICON_MARQUEE_RECT },
+			{ id: "lasso", icon: "lasso", label: "Freehand select", svg: ICON_LASSO },
 		];
 		for (const m of defs) {
 			const btn = modes.createDiv({
 				cls: "canvas-pencil-mode canvas-pencil-mode-btn",
 				attr: { "aria-label": m.label },
 			});
-			setIcon(btn, m.icon);
+			if (m.svg) setSvg(btn, m.svg);
+			else setIcon(btn, m.icon);
 			if (m.id === this.marqueeMode) btn.addClass("is-active");
 			btn.addEventListener("click", () => {
 				this.marqueeMode = m.id;
