@@ -782,7 +782,9 @@ class CanvasToolbar {
 		}));
 		this.searchCountEl = field.createDiv({ cls: "canvas-kit-search-count" });
 
-		const done = bar.createEl("button", { cls: "canvas-kit-search-done", text: "Done" });
+		// mod-cta is Obsidian's native accent-button class — it supplies the
+		// accent background and hover states without any specificity fights.
+		const done = bar.createEl("button", { cls: "canvas-kit-search-done mod-cta", text: "Done" });
 		done.addEventListener("click", () => this.closeSearch());
 		this.searchStatusEl = panel.createDiv({ cls: "canvas-kit-search-status" });
 

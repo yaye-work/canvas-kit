@@ -1264,6 +1264,9 @@ body .canvas-wrapper .canvas-controls {
 	border-radius: var(--radius-m);
 }
 
+/* Accent background comes from Obsidian's own mod-cta class. Text color:
+   Obsidian buttons paint color: var(--text-color) — overriding the VARIABLE
+   needs no specificity at all, the built-in rule does the painting. */
 .canvas-kit-search-panel button.canvas-kit-search-done {
 	flex-shrink: 0;
 	padding: 0 18px;
@@ -1271,12 +1274,12 @@ body .canvas-wrapper .canvas-controls {
 	font-size: var(--font-ui-small);
 	cursor: pointer;
 	border-radius: 10px;
-	box-shadow: none !important;
-	background-color: var(--interactive-accent) !important;
-	color: #ffffff !important;
+	box-shadow: none;
 	border: none;
+	--text-color: #ffffff;
 }
 
 .canvas-kit-search-panel button.canvas-kit-search-done:hover {
-	background-color: var(--interactive-accent-hover) !important;
+	background-color: var(--interactive-accent-hover);
+	box-shadow: none;
 }
