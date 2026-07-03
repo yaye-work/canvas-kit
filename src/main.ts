@@ -22,6 +22,7 @@ interface CanvasPencilSettings {
 	hideBottomBar: boolean; // hide Obsidian's bottom add-to-canvas bar (.canvas-card-menu)
 	toolbarScale: number; // scale factor for Canvas Kit's own toolbar (1 = default)
 	inkSmoothing: number; // perfect-freehand smoothing amount (0 = raw, 1 = very smooth)
+	showTableTool: boolean; // show the table button in the toolbar
 }
 
 const DEFAULT_SETTINGS: CanvasPencilSettings = {
@@ -32,6 +33,7 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	hideBottomBar: true,
 	toolbarScale: 1.25,
 	inkSmoothing: 0.5,
+	showTableTool: true,
 };
 
 // Live copy of the ink-smoothing setting, module-level because the ink SVG
@@ -77,21 +79,40 @@ const strokeIdxToFrac = (i: number) => {
 interface TapePattern {
 	id: string;
 	label: string;
-	base: string; // solid base color
-	swatchCss: string;
+	base: string | (() => string); // solid base color (function = resolved at use time)
+	swatchCss: string | (() => string);
 	/** SVG <pattern> definition; angle = tape rotation in degrees. */
 	defs: (pid: string, angle: number) => string;
 }
+
+/** Obsidian's accent color as h/s/l (from --interactive-accent-hsl, "254deg, 80%, 68%"-ish). */
+function accentHsl(): { h: number; s: number; l: number } {
+	const raw = getComputedStyle(document.body).getPropertyValue("--interactive-accent-hsl");
+	const m = raw.match(/([\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/);
+	if (!m) return { h: 258, s: 57, l: 61 };
+	return { h: +m[1], s: +m[2], l: +m[3] };
+}
+/** Accent-derived tape colors: the grid lines in the accent itself (capped so
+ * they stay visible on the pale base), the base a pale tint of the same hue.
+ * Resolved lazily so a theme/accent change shows up in the next tape strip. */
+const tapeAccentLine = () => {
+	const { h, s, l } = accentHsl();
+	return `hsl(${h}, ${s}%, ${Math.min(l, 58)}%)`;
+};
+const tapeAccentBase = () => {
+	const { h, s } = accentHsl();
+	return `hsl(${h}, ${Math.min(s, 75)}%, 89%)`;
+};
 
 const TAPE_PATTERNS: TapePattern[] = [
 	{
 		id: "grid",
 		label: "Grid",
-		base: "#dcd0f7",
-		swatchCss:
-			"background-color:#dcd0f7;background-image:linear-gradient(#8a63d2 1px,transparent 1px),linear-gradient(90deg,#8a63d2 1px,transparent 1px);background-size:5px 5px;",
+		base: tapeAccentBase,
+		swatchCss: () =>
+			`background-color:${tapeAccentBase()};background-image:linear-gradient(${tapeAccentLine()} 1px,transparent 1px),linear-gradient(90deg,${tapeAccentLine()} 1px,transparent 1px);background-size:5px 5px;`,
 		defs: (pid, angle) =>
-			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><path d="M16 0H0V16" fill="none" stroke="#8a63d2" stroke-width="1.5"/></pattern>`,
+			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><path d="M16 0H0V16" fill="none" stroke="${tapeAccentLine()}" stroke-width="1.5"/></pattern>`,
 	},
 	{
 		id: "dots",
@@ -583,6 +604,15 @@ export default class CanvasPencilPlugin extends Plugin {
 		return null;
 	}
 
+	/** Tear down and recreate every toolbar (after a setting that changes its layout). */
+	rebuildToolbars() {
+		for (const [view, tb] of this.toolbars) {
+			tb.destroy();
+			this.toolbars.delete(view);
+		}
+		this.attachToolbars();
+	}
+
 	private attachToolbars() {
 		const live = new Set<CanvasViewLike>();
 		for (const leaf of this.app.workspace.getLeavesOfType("canvas")) {
@@ -790,6 +820,7 @@ class CanvasToolbar {
 		// Islands: each group of tools sits in its own rounded card (per design).
 		let group: HTMLElement | null = null;
 		for (const t of TOOLS) {
+			if (t.id === "table" && !plugin.settings.showTableTool) continue;
 			if (!group || t.sep) group = this.barEl.createDiv({ cls: "canvas-pencil-group" });
 			const btn = group.createDiv({
 				cls: "canvas-pencil-tool",
@@ -837,6 +868,7 @@ class CanvasToolbar {
 			}
 			const t = TOOLS.find((t) => t.key === e.key.toLowerCase());
 			if (t) {
+				if (t.id === "table" && !this.plugin.settings.showTableTool) return;
 				this.setTool(t.id);
 				e.preventDefault();
 			}
@@ -1955,7 +1987,10 @@ class CanvasToolbar {
 			for (const p of TAPE_PATTERNS) {
 				const sw = el.createDiv({
 					cls: "canvas-pencil-swatch canvas-pencil-tape-swatch",
-					attr: { "aria-label": p.label, style: p.swatchCss },
+					attr: {
+						"aria-label": p.label,
+						style: typeof p.swatchCss === "function" ? p.swatchCss() : p.swatchCss,
+					},
 				});
 				if (this.tapePattern === p.id) sw.addClass("is-active");
 				sw.addEventListener("click", () => {
@@ -3396,6 +3431,10 @@ function bboxTouchesPolygon(
 
 const TABLE_CELL_W = 140;
 const TABLE_CELL_H = 48;
+/** Blank strip above the table, inside the node, so Obsidian's floating node
+ * menu (which hovers just above the node) doesn't cover the column-reorder
+ * handles that sit 12px above the table's top edge. */
+const TABLE_TOP_PAD = 26;
 
 class DragCreateOverlay extends ToolOverlay {
 	private rectEl: HTMLElement;
@@ -3625,7 +3664,7 @@ class DragCreateOverlay extends ToolOverlay {
 			({ cols, rows } = tableDims(a, b));
 		} else {
 			width = cols * TABLE_CELL_W;
-			height = rows * TABLE_CELL_H;
+			height = rows * TABLE_CELL_H + TABLE_TOP_PAD;
 			x = Math.round(a.x - width / 2);
 			y = Math.round(a.y - height / 2);
 		}
@@ -3665,7 +3704,7 @@ function tableDims(
 	const height = Math.abs(b.y - a.y);
 	return {
 		cols: Math.min(10, Math.max(1, Math.round(width / TABLE_CELL_W))),
-		rows: Math.min(20, Math.max(2, Math.round(height / TABLE_CELL_H))),
+		rows: Math.min(20, Math.max(2, Math.round((height - TABLE_TOP_PAD) / TABLE_CELL_H))),
 	};
 }
 
@@ -3735,7 +3774,7 @@ class TableWidget {
 			changed = true;
 		}
 		if (this.lastSyncedH && nh && Math.abs(nh - this.lastSyncedH) > 3) {
-			const f = nh / Math.max(1, sumArr(this.rowH));
+			const f = (nh - TABLE_TOP_PAD) / Math.max(1, sumArr(this.rowH));
 			this.rowH = this.rowH.map((h) => Math.max(28, Math.round(h * f)));
 			changed = true;
 		}
@@ -3760,6 +3799,7 @@ class TableWidget {
 
 		this.content.empty();
 		const root = (this.rootEl = this.content.createDiv({ cls: "cp-table-root" }));
+		root.style.paddingTop = `${TABLE_TOP_PAD}px`;
 		// Keep canvas shortcuts/deletion away from cell typing.
 		root.addEventListener("keydown", (e) => e.stopPropagation());
 
@@ -4024,7 +4064,7 @@ class TableWidget {
 			this.colW = Array<number>(cols).fill(Math.max(50, Math.round(nw / cols)));
 		}
 		if (this.rowH.length !== rows) {
-			const nh = this.node.height ?? rows * TABLE_CELL_H;
+			const nh = (this.node.height ?? rows * TABLE_CELL_H + TABLE_TOP_PAD) - TABLE_TOP_PAD;
 			this.rowH = Array<number>(rows).fill(Math.max(28, Math.round(nh / rows)));
 		}
 	}
@@ -4050,24 +4090,27 @@ class TableWidget {
 		const th = t.offsetHeight;
 		if (this.addColEl) {
 			this.addColEl.style.left = `${tw + 6}px`;
-			this.addColEl.setCssStyles({ top: "0px" });
+			this.addColEl.setCssStyles({ top: `${TABLE_TOP_PAD}px` });
 			this.addColEl.style.height = `${th}px`;
 		}
 		if (this.addRowEl) {
-			this.addRowEl.style.top = `${th + 6}px`;
+			this.addRowEl.style.top = `${TABLE_TOP_PAD + th + 6}px`;
 			this.addRowEl.setCssStyles({ left: "0px" });
 			this.addRowEl.style.width = `${tw}px`;
 		}
 		const first = t.rows[0];
 		this.colHandles.forEach((h, i) => {
 			const cell = first?.cells[i];
-			if (cell) h.style.left = `${cell.offsetLeft + cell.offsetWidth / 2}px`;
+			if (cell) {
+				h.style.left = `${cell.offsetLeft + cell.offsetWidth / 2}px`;
+				h.style.top = `${TABLE_TOP_PAD - 12}px`;
+			}
 		});
 		this.colDividers.forEach((d, i) => {
 			const cell = first?.cells[i];
 			if (cell) {
 				d.style.left = `${cell.offsetLeft + cell.offsetWidth - 3}px`;
-				d.setCssStyles({ top: "0px" });
+				d.setCssStyles({ top: `${TABLE_TOP_PAD}px` });
 				d.style.height = `${th}px`;
 			}
 		});
@@ -4089,7 +4132,7 @@ class TableWidget {
 			const cell = first?.cells[i];
 			if (cell) {
 				d.style.left = `${cell.offsetLeft + cell.offsetWidth}px`;
-				d.setCssStyles({ top: "-12px" });
+				d.setCssStyles({ top: `${TABLE_TOP_PAD - 12}px` });
 			}
 		});
 		this.insertRowDots.forEach((d, r) => {
@@ -4145,7 +4188,7 @@ class TableWidget {
 		const t = this.tableEl;
 		if (!t || !t.isConnected || !this.node.getData || !this.node.setData) return;
 		const w = t.offsetWidth;
-		const h = t.offsetHeight;
+		const h = t.offsetHeight && t.offsetHeight + TABLE_TOP_PAD;
 		if (!w || !h) return;
 		this.lastSyncedW = w;
 		this.lastSyncedH = h;
@@ -4765,7 +4808,7 @@ function buildTapeSvg(
 	} else {
 		const pattern =
 			TAPE_PATTERNS.find((p) => p.id === patternId) ?? TAPE_PATTERNS[0];
-		base = pattern.base;
+		base = typeof pattern.base === "function" ? pattern.base() : pattern.base;
 		defs = pattern.defs(pid, Number(angle));
 	}
 
@@ -4917,6 +4960,17 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 						this.plugin.settings.inkSmoothing = v / 100;
 						await this.plugin.saveSettings();
 					})
+			);
+
+		new Setting(containerEl)
+			.setName("Table tool")
+			.setDesc("Show the table button in the toolbar (B). Existing tables keep working either way.")
+			.addToggle((t) =>
+				t.setValue(this.plugin.settings.showTableTool).onChange(async (v) => {
+					this.plugin.settings.showTableTool = v;
+					await this.plugin.saveSettings();
+					this.plugin.rebuildToolbars();
+				})
 			);
 
 		new Setting(containerEl)
