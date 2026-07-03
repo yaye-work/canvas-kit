@@ -21,6 +21,7 @@ interface CanvasPencilSettings {
 	textSize: number; // starting font size for new text (in canvas units)
 	hideBottomBar: boolean; // hide Obsidian's bottom add-to-canvas bar (.canvas-card-menu)
 	toolbarScale: number; // scale factor for Canvas Kit's own toolbar (1 = default)
+	inkSmoothing: number; // perfect-freehand smoothing amount (0 = raw, 1 = very smooth)
 }
 
 const DEFAULT_SETTINGS: CanvasPencilSettings = {
@@ -30,7 +31,17 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	textSize: 20,
 	hideBottomBar: true,
 	toolbarScale: 1.25,
+	inkSmoothing: 0.5,
 };
+
+// Live copy of the ink-smoothing setting, module-level because the ink SVG
+// builder is a plain function. Streamline rides along at 0.8× (the original
+// 0.5/0.4 pairing) so one slider controls both perfect-freehand knobs.
+let INK_SMOOTHING = 0.5;
+function setInkSmoothing(v: number) {
+	INK_SMOOTHING = Math.max(0, Math.min(1, v));
+}
+const inkStreamline = () => INK_SMOOTHING * 0.8;
 
 // Designed preset row (Figma): black (default), red, yellow, green, blue,
 // magenta. The selected swatch shows a ring; off-palette colors come from the
@@ -428,9 +439,11 @@ export default class CanvasPencilPlugin extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<CanvasPencilSettings>);
+		setInkSmoothing(this.settings.inkSmoothing);
 	}
 
 	async saveSettings() {
+		setInkSmoothing(this.settings.inkSmoothing);
 		await this.saveData(this.settings);
 	}
 }
@@ -2691,8 +2704,8 @@ class MarkerOverlay extends ToolOverlay {
 			{
 				size: stroke.size * scale,
 				thinning: 0, // uniform width — no pressure/speed variation
-				smoothing: 0.5,
-				streamline: 0.4,
+				smoothing: INK_SMOOTHING,
+				streamline: inkStreamline(),
 				simulatePressure: false,
 			}
 		);
@@ -4464,8 +4477,8 @@ function buildStrokesSvg(strokes: PencilStroke[]): InkSvg | null {
 			const outline = getStroke(stroke.worldPts, {
 				size: stroke.size,
 				thinning: 0,
-				smoothing: 0.5,
-				streamline: 0.4,
+				smoothing: INK_SMOOTHING,
+				streamline: inkStreamline(),
 				simulatePressure: false,
 			});
 			if (outline.length < 2) continue;
@@ -4696,6 +4709,21 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 						this.plugin.settings.toolbarScale = v / 100;
 						await this.plugin.saveSettings();
 						this.plugin.applyToolbarScale();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Ink smoothing")
+			.setDesc(
+				"How much the marker smooths your strokes. 0% keeps every wobble; higher values give rounder, calmer lines. Applies to new strokes."
+			)
+			.addSlider((s) =>
+				s
+					.setLimits(0, 100, 5)
+					.setValue(Math.round((this.plugin.settings.inkSmoothing ?? 0.5) * 100))
+					.onChange(async (v) => {
+						this.plugin.settings.inkSmoothing = v / 100;
+						await this.plugin.saveSettings();
 					})
 			);
 
