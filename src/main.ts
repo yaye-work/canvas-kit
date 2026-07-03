@@ -394,7 +394,56 @@ function quickShapeFor(raw: Point[]): { pts: Point[]; closed: boolean } | null {
 		u * sin + v * cos,
 	];
 
-	if (areaRatio > 0.86) {
+	if (areaRatio < 0.62) return null; // too hollow to be a rect OR an ellipse
+
+	// Radial spread in the box frame: an ellipse's points sit at a ~constant
+	// normalized radius (spread ≈ 0.01–0.05 even drawn sloppily); a rectangle's
+	// corners spike to ~1.41 while its edge midpoints sit at 1 (spread ≈ 0.1).
+	// Blobs/beans scatter far wider. This breaks the tie in the ambiguous
+	// area-ratio band where sloppy rects and ellipses overlap.
+	const a = Math.max(1e-6, bU);
+	const b = Math.max(1e-6, bV);
+	const rr = pts.map(([x, y]) => {
+		const u = x * cos + y * sin;
+		const v = -x * sin + y * cos;
+		return Math.hypot((u - cu) / a, (v - cv) / b);
+	});
+	let mean = 0;
+	for (const r of rr) mean += r;
+	mean /= rr.length;
+	let variance = 0;
+	for (const r of rr) variance += (r - mean) * (r - mean);
+	const spread = Math.sqrt(variance / rr.length) / mean;
+
+	// Corner occupancy: how many of the box's 4 corner regions contain points.
+	// A rectangle (even with rounded corners) reaches into all 4; an ellipse
+	// can't reach any (|u|,|v| both > 0.72 needs normalized radius > 1); a bean
+	// or D-shape fills only some. This separates sloppy rects from blobs where
+	// area ratio and radial spread overlap.
+	const cornerCount = (depth: number): number => {
+		const seen = new Set<number>();
+		for (const r of pts) {
+			const u = (r[0] * cos + r[1] * sin - cu) / a;
+			const v = (-r[0] * sin + r[1] * cos - cv) / b;
+			if (Math.abs(u) > depth && Math.abs(v) > depth) {
+				seen.add((u > 0 ? 1 : 0) + (v > 0 ? 2 : 0));
+			}
+		}
+		return seen.size;
+	};
+	const corners = cornerCount(0.72);
+
+	const isEllipse = corners <= 1 && spread < 0.09 && areaRatio < 0.86;
+	// Rect: all 4 shallow corner regions occupied AND either deep-corner points
+	// (a bean's lobes graze the shallow corners but never the deep ones) or a
+	// box-filling area a bean can't reach.
+	const isRect =
+		!isEllipse &&
+		corners === 4 &&
+		areaRatio > 0.7 &&
+		(cornerCount(0.8) >= 1 || areaRatio > 0.85);
+
+	if (isRect) {
 		// rectangle: snap to the min-area box (keeps the drawn tilt)
 		const n = 12;
 		const c1 = toWorld(bMinU, bMinV);
@@ -415,30 +464,14 @@ function quickShapeFor(raw: Point[]): { pts: Point[]; closed: boolean } | null {
 		};
 	}
 
-	if (areaRatio > 0.65) {
-		// ellipse candidate — confirm with the normalized radial profile in the
-		// box frame (~constant 1 for an ellipse; blobs and beans scatter more).
-		const a = Math.max(1e-6, bU);
-		const b = Math.max(1e-6, bV);
-		const rr = pts.map(([x, y]) => {
-			const u = x * cos + y * sin;
-			const v = -x * sin + y * cos;
-			return Math.hypot((u - cu) / a, (v - cv) / b);
-		});
-		let mean = 0;
-		for (const r of rr) mean += r;
-		mean /= rr.length;
-		let variance = 0;
-		for (const r of rr) variance += (r - mean) * (r - mean);
-		if (Math.sqrt(variance / rr.length) / mean < 0.12) {
-			const out: Point[] = [];
-			for (let i = 0; i < 64; i++) {
-				const t = (i / 64) * Math.PI * 2;
-				const [x, y] = toWorld(cu + a * Math.cos(t), cv + b * Math.sin(t));
-				out.push([x, y, 0.5]);
-			}
-			return { pts: out, closed: true };
+	if (isEllipse) {
+		const out: Point[] = [];
+		for (let i = 0; i < 64; i++) {
+			const t = (i / 64) * Math.PI * 2;
+			const [x, y] = toWorld(cu + a * Math.cos(t), cv + b * Math.sin(t));
+			out.push([x, y, 0.5]);
 		}
+		return { pts: out, closed: true };
 	}
 	return null;
 }
