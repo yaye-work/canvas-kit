@@ -24,16 +24,19 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	cursor: default; /* restore normal pointer over the bar, not the tool cursor */
 }
 
-/* Islands: rounded cards holding each tool group / sub-bar segment. */
+/* Islands: rounded cards holding each tool group / sub-bar segment.
+   An opaque --background-primary base sits under the subtle tint so ink drawn
+   on the canvas beneath can't show through the toolbar. */
 .canvas-pencil-group,
 .canvas-pencil-island {
-	background: rgba(0, 0, 0, 0.05);
+	background-color: var(--background-primary);
+	background-image: linear-gradient(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.05));
 	border-radius: 5px;
 }
 
 .theme-dark .canvas-pencil-group,
 .theme-dark .canvas-pencil-island {
-	background: rgba(255, 255, 255, 0.08);
+	background-image: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08));
 }
 
 .canvas-pencil-group {

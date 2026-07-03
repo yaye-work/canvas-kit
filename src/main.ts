@@ -3177,7 +3177,7 @@ class MarqueeSelectOverlay extends ToolOverlay {
 			const w = this.worldFromClient(e.clientX, e.clientY);
 			// Pointer landed inside the current selection → move it (pencil,
 			// finger, or mouse alike — no long-press needed).
-			const PAD = 12;
+			const PAD = 8;
 			if (
 				this.selBox &&
 				this.selected.length &&
