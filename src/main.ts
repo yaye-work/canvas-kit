@@ -2845,9 +2845,10 @@ abstract class ToolOverlay {
 const HIGHLIGHT_OPACITY = 0.45;
 const HIGHLIGHT_SIZE_FACTOR = 3;
 const TAPE_THICKNESS = 80;
-// Tape width slider range (5 marks spread evenly; default sits on the middle).
-const TAPE_MIN = 30;
-const TAPE_MAX = 130;
+// Tape width slider range: the original tape width is the SMALLEST size, the
+// 5 marks go up from there (default = first mark).
+const TAPE_MIN = 80;
+const TAPE_MAX = 240;
 
 class MarkerOverlay extends ToolOverlay {
 	private canvasEl: HTMLCanvasElement;
@@ -5013,7 +5014,7 @@ function buildTapeSvg(
 		if (p.x > maxX) maxX = p.x;
 		if (p.y > maxY) maxY = p.y;
 	}
-	const PAD = 10; // room for the drop shadow
+	const PAD = 4;
 	minX -= PAD; minY -= PAD; maxX += PAD; maxY += PAD;
 	const width = Math.max(1, Math.round(maxX - minX));
 	const height = Math.max(1, Math.round(maxY - minY));
@@ -5024,10 +5025,6 @@ function buildTapeSvg(
 		"Z";
 	const angle = r2((Math.atan2(uy, ux) * 180) / Math.PI);
 	const pid = `cpg${randomId().slice(0, 6)}`;
-	const shadow =
-		`<filter id="${pid}sh" x="-30%" y="-30%" width="160%" height="160%">` +
-		`<feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.16"/>` +
-		`</filter>`;
 
 	// Custom image with a wide aspect → 3-slice: the left and right square
 	// slices of the image are FIXED end caps, the middle slice tiles along the
@@ -5047,17 +5044,17 @@ function buildTapeSvg(
 		const img = `<image href="${customImage}" width="${imgW}" height="${imgH}"/>`;
 		const svg =
 			`<svg class="${INK_MARK}" xmlns="http://www.w3.org/2000/svg" viewBox="${r2(minX)} ${r2(minY)} ${width} ${height}" width="${width}" height="${height}">` +
-			`<defs>${shadow}<clipPath id="${pid}c"><path d="${d}"/></clipPath>` +
+			`<defs><clipPath id="${pid}c"><path d="${d}"/></clipPath>` +
 			`<pattern id="${pid}" x="${r2(capL)}" width="${r2(tileL)}" height="${thickness}" patternUnits="userSpaceOnUse">` +
 			`<svg width="${r2(tileL)}" height="${thickness}" viewBox="${capImgW} 0 ${midImgW} ${imgH}" preserveAspectRatio="none">${img}</svg>` +
 			`</pattern></defs>` +
-			`<g filter="url(#${pid}sh)"><g clip-path="url(#${pid}c)">` +
+			`<g clip-path="url(#${pid}c)">` +
 			`<g transform="translate(${r2(a.x)} ${r2(a.y)}) rotate(${angle})">` +
 			`<rect x="0" y="${r2(-half2)}" width="${r2(len)}" height="${thickness}" fill="#ffffff"/>` +
 			`<rect x="${r2(capL)}" y="${r2(-half2)}" width="${r2(Math.max(0, len - 2 * capL))}" height="${thickness}" fill="url(#${pid})"/>` +
 			`<svg x="0" y="${r2(-half2)}" width="${r2(capL)}" height="${thickness}" viewBox="0 0 ${capImgW} ${imgH}" preserveAspectRatio="none">${img}</svg>` +
 			`<svg x="${r2(len - capL)}" y="${r2(-half2)}" width="${r2(capL)}" height="${thickness}" viewBox="${imgW - capImgW} 0 ${capImgW} ${imgH}" preserveAspectRatio="none">${img}</svg>` +
-			`</g></g></g></svg>`;
+			`</g></g></svg>`;
 		return { svg, box: { x: Math.round(minX), y: Math.round(minY), width, height } };
 	}
 
@@ -5077,11 +5074,9 @@ function buildTapeSvg(
 
 	const svg =
 		`<svg class="${INK_MARK}" xmlns="http://www.w3.org/2000/svg" viewBox="${r2(minX)} ${r2(minY)} ${width} ${height}" width="${width}" height="${height}">` +
-		`<defs>${shadow}${defs}</defs>` +
-		`<g filter="url(#${pid}sh)">` +
+		`<defs>${defs}</defs>` +
 		`<path d="${d}" fill="${base}"/>` +
 		`<path d="${d}" fill="url(#${pid})"/>` +
-		`</g>` +
 		`</svg>`;
 	return { svg, box: { x: Math.round(minX), y: Math.round(minY), width, height } };
 }
