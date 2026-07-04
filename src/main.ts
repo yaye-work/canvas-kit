@@ -1040,6 +1040,7 @@ class CanvasToolbar {
 		this.doc.addEventListener("contextmenu", this.contextmenuHandler, true);
 
 		this.bindUndoGestures();
+		this.bindPenCompat();
 		this.buildSearchButton();
 		this.refreshNodeStyles();
 	}
@@ -1325,6 +1326,64 @@ class CanvasToolbar {
 	 */
 	penBlocksTouch(): boolean {
 		return this.penDownCount > 0 || Date.now() - this.lastPenUpAt < 500;
+	}
+
+	private penCompatUnbind: (() => void) | null = null;
+
+	/**
+	 * Obsidian's canvas drag/resize handlers only START for pointerType "mouse"
+	 * (touch has its own long-press path) — a stylus matches NEITHER, so the
+	 * Apple Pencil can't move sections or drag resize handles. While the Select
+	 * tool is active, primary pen pointer events are swallowed and re-dispatched
+	 * as "mouse" so the pencil drives the same interactions a mouse would.
+	 * Scoped to Select only: the drawing tools handle pen themselves (and rely
+	 * on real pen events for palm rejection).
+	 */
+	private bindPenCompat() {
+		const wrap = this.view.canvas!.wrapperEl;
+		const win = this.doc.defaultView ?? window;
+		const retag = (e: PointerEvent) => {
+			if (!e.isTrusted || e.pointerType !== "pen" || !e.isPrimary) return;
+			if (this.tool !== "select") return;
+			const t = e.target as HTMLElement | null;
+			// Leave the plugin's own UI (toolbar, popups, tables, menus) alone.
+			if (
+				t?.closest(
+					".canvas-pencil-bar, .canvas-pencil-subbar, .canvas-pencil-size-popup, .canvas-pencil-card-actions, .canvas-pencil-card-search, .canvas-menu, .canvas-controls, .canvas-card-menu, .canvas-kit-search-panel, .cp-table-root"
+				)
+			) {
+				return;
+			}
+			e.stopImmediatePropagation();
+			t?.dispatchEvent(
+				new PointerEvent(e.type, {
+					bubbles: true,
+					cancelable: true,
+					composed: true,
+					view: win,
+					pointerId: e.pointerId,
+					pointerType: "mouse",
+					isPrimary: true,
+					button: e.button,
+					buttons: e.buttons,
+					clientX: e.clientX,
+					clientY: e.clientY,
+					screenX: e.screenX,
+					screenY: e.screenY,
+					shiftKey: e.shiftKey,
+					metaKey: e.metaKey,
+					ctrlKey: e.ctrlKey,
+					altKey: e.altKey,
+					pressure: e.pressure,
+					detail: e.detail,
+				})
+			);
+		};
+		const types = ["pointerdown", "pointermove", "pointerup", "pointercancel"] as const;
+		for (const ty of types) wrap.addEventListener(ty, retag, true);
+		this.penCompatUnbind = () => {
+			for (const ty of types) wrap.removeEventListener(ty, retag, true);
+		};
 	}
 
 	/**
@@ -2765,6 +2824,8 @@ class CanvasToolbar {
 		this.searchBtnEl = null;
 		this.undoGestureUnbind?.();
 		this.undoGestureUnbind = null;
+		this.penCompatUnbind?.();
+		this.penCompatUnbind = null;
 		this.barEl.remove();
 	}
 }
