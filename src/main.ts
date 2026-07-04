@@ -5049,30 +5049,30 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Smallest brush size")
 			.setDesc("The brush slider's first mark. The five preset marks spread evenly between smallest and biggest.")
-			.addSlider((s) =>
-				s
-					.setLimits(1, 15, 1)
-					.setDynamicTooltip()
-					.setValue(this.plugin.settings.brushMin)
-					.onChange(async (v) => {
-						this.plugin.settings.brushMin = v;
-						await this.plugin.saveSettings();
-					})
-			);
+			.addText((t) => {
+				t.inputEl.type = "number";
+				t.setValue(String(this.plugin.settings.brushMin)).onChange(async (v) => {
+					const n = Math.round(Number(v));
+					if (!isFinite(n) || n < 1) return;
+					this.plugin.settings.brushMin = Math.min(n, this.plugin.settings.brushMax - 4);
+					await this.plugin.saveSettings();
+					this.plugin.rebuildToolbars(); // open size slider re-reads the new range
+				});
+			});
 
 		new Setting(containerEl)
 			.setName("Biggest brush size")
 			.setDesc("The brush slider's last mark.")
-			.addSlider((s) =>
-				s
-					.setLimits(10, 80, 1)
-					.setDynamicTooltip()
-					.setValue(this.plugin.settings.brushMax)
-					.onChange(async (v) => {
-						this.plugin.settings.brushMax = v;
-						await this.plugin.saveSettings();
-					})
-			);
+			.addText((t) => {
+				t.inputEl.type = "number";
+				t.setValue(String(this.plugin.settings.brushMax)).onChange(async (v) => {
+					const n = Math.round(Number(v));
+					if (!isFinite(n) || n <= this.plugin.settings.brushMin) return;
+					this.plugin.settings.brushMax = Math.min(200, n);
+					await this.plugin.saveSettings();
+					this.plugin.rebuildToolbars();
+				});
+			});
 
 		new Setting(containerEl)
 			.setName("Default text size")
