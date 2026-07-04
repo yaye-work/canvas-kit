@@ -40,37 +40,35 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	brushMax: 28,
 };
 
-// Live copy of the ink-smoothing setting, module-level because the ink SVG
-// builder is a plain function. Streamline rides along at 0.8× (the original
-// 0.5/0.4 pairing) so one slider controls both perfect-freehand knobs.
+// Stabilization strength (Procreate's "motion filtering"), module-level
+// because the ink SVG builder is a plain function. This does NOT touch how the
+// stroke outline is rendered — perfect-freehand always runs at its pleasant
+// baseline (smoothing 0.5 / streamline 0.4), so ink never looks segmented.
 let INK_SMOOTHING = 0.5;
 function setInkSmoothing(v: number) {
 	INK_SMOOTHING = Math.max(0, Math.min(1, v));
 }
-const inkStreamline = () => INK_SMOOTHING * 0.8;
 
 /**
- * Above 50%, perfect-freehand's own smoothing/streamline barely changes the
- * look — so the top half of the slider also runs moving-average passes over
- * the points themselves (endpoints pinned): 0–2 extra passes at 50–75%, up to
- * 6 at 100%, which visibly irons out wobble.
+ * Motion filtering: a low-pass (exponential moving average) filter over the
+ * pen's input path. Each point is pulled toward the running smoothed position,
+ * damping hand wobble — lines come out straighter and calmer the higher the
+ * setting. The true final point is appended so the stroke still ends exactly
+ * where the pen lifted (Procreate's catch-up behavior).
  */
-function smoothInkPts(pts: Point[]): Point[] {
-	const passes = Math.max(0, Math.round((INK_SMOOTHING - 0.5) * 12));
-	if (!passes || pts.length < 5) return pts;
-	let out = pts;
-	for (let p = 0; p < passes; p++) {
-		const next: Point[] = [out[0]];
-		for (let i = 1; i < out.length - 1; i++) {
-			next.push([
-				(out[i - 1][0] + 2 * out[i][0] + out[i + 1][0]) / 4,
-				(out[i - 1][1] + 2 * out[i][1] + out[i + 1][1]) / 4,
-				out[i][2],
-			]);
-		}
-		next.push(out[out.length - 1]);
-		out = next;
+function stabilizeInkPts(pts: Point[]): Point[] {
+	const s = INK_SMOOTHING;
+	if (s <= 0 || pts.length < 3) return pts;
+	const alpha = 1 - 0.92 * s; // 0% → no lag; 100% → heavy filtering
+	const out: Point[] = [pts[0]];
+	let x = pts[0][0];
+	let y = pts[0][1];
+	for (let i = 1; i < pts.length; i++) {
+		x += (pts[i][0] - x) * alpha;
+		y += (pts[i][1] - y) * alpha;
+		out.push([x, y, pts[i][2]]);
 	}
+	out.push(pts[pts.length - 1]);
 	return out;
 }
 
@@ -3034,12 +3032,12 @@ class MarkerOverlay extends ToolOverlay {
 
 	private outlineFor(stroke: PencilStroke, scale: number): number[][] {
 		return getStroke(
-			smoothInkPts(stroke.worldPts).map(([x, y, p]) => [x * scale, y * scale, p]),
+			stabilizeInkPts(stroke.worldPts).map(([x, y, p]) => [x * scale, y * scale, p]),
 			{
 				size: stroke.size * scale,
 				thinning: 0, // uniform width — no pressure/speed variation
-				smoothing: INK_SMOOTHING,
-				streamline: inkStreamline(),
+				smoothing: 0.5,
+				streamline: 0.4,
 				simulatePressure: false,
 			}
 		);
@@ -4850,11 +4848,11 @@ function buildStrokesSvg(strokes: PencilStroke[]): InkSvg | null {
 				`<path d="${d}" fill="none" stroke="currentColor" stroke-width="${stroke.size}"${opacity} stroke-linecap="${cap}" stroke-linejoin="${join}"/>`
 			);
 		} else {
-			const outline = getStroke(smoothInkPts(stroke.worldPts), {
+			const outline = getStroke(stabilizeInkPts(stroke.worldPts), {
 				size: stroke.size,
 				thinning: 0,
-				smoothing: INK_SMOOTHING,
-				streamline: inkStreamline(),
+				smoothing: 0.5,
+				streamline: 0.4,
 				simulatePressure: false,
 			});
 			if (outline.length < 2) continue;
@@ -5104,13 +5102,14 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Ink smoothing")
+			.setName("Stabilization")
 			.setDesc(
-				"How much the marker smooths your strokes. 0% keeps every wobble; higher values give rounder, calmer lines. Applies to new strokes."
+				"Motion filtering (as in Procreate): damps hand wobble by low-pass filtering the pen path, so lines come out straighter and calmer. 0% draws your exact hand motion; higher values trade responsiveness for steadiness. Applies to new strokes."
 			)
 			.addSlider((s) =>
 				s
 					.setLimits(0, 100, 5)
+					.setDynamicTooltip()
 					.setValue(Math.round((this.plugin.settings.inkSmoothing ?? 0.5) * 100))
 					.onChange(async (v) => {
 						this.plugin.settings.inkSmoothing = v / 100;
