@@ -45,6 +45,31 @@ function setInkSmoothing(v: number) {
 }
 const inkStreamline = () => INK_SMOOTHING * 0.8;
 
+/**
+ * Above 50%, perfect-freehand's own smoothing/streamline barely changes the
+ * look — so the top half of the slider also runs moving-average passes over
+ * the points themselves (endpoints pinned): 0–2 extra passes at 50–75%, up to
+ * 6 at 100%, which visibly irons out wobble.
+ */
+function smoothInkPts(pts: Point[]): Point[] {
+	const passes = Math.max(0, Math.round((INK_SMOOTHING - 0.5) * 12));
+	if (!passes || pts.length < 5) return pts;
+	let out = pts;
+	for (let p = 0; p < passes; p++) {
+		const next: Point[] = [out[0]];
+		for (let i = 1; i < out.length - 1; i++) {
+			next.push([
+				(out[i - 1][0] + 2 * out[i][0] + out[i + 1][0]) / 4,
+				(out[i - 1][1] + 2 * out[i][1] + out[i + 1][1]) / 4,
+				out[i][2],
+			]);
+		}
+		next.push(out[out.length - 1]);
+		out = next;
+	}
+	return out;
+}
+
 // Designed preset row (Figma): black (default), red, yellow, green, blue,
 // magenta. The selected swatch shows a ring; off-palette colors come from the
 // wheel. Black matches the default marker color so a fresh marker rings black.
@@ -275,8 +300,9 @@ type Point = [number, number, number];
 
 /** How long the pen must sit still (ms) before lifting to trigger a snap. */
 const QUICKSHAPE_HOLD_MS = 150;
-/** Client-pixel wiggle allowed while "holding still" (pen jitter). */
-const QUICKSHAPE_JITTER_PX = 6;
+/** Client-pixel wiggle allowed while "holding still" (hand-held pencil jitter
+ * on glass easily exceeds a few px even when the user feels perfectly still). */
+const QUICKSHAPE_JITTER_PX = 10;
 
 const shapeSampleLine = (a: [number, number], b: [number, number], n: number): Point[] => {
 	const pts: Point[] = [];
@@ -2779,6 +2805,11 @@ class MarkerOverlay extends ToolOverlay {
 	private current: PencilStroke | null = null;
 	/** Where the pen last actually moved (client px) — QuickShape hold detector. */
 	private holdAnchor: { x: number; y: number; t: number } | null = null;
+	/** How long the pen had been still when the anchor last reset, and when.
+	 * Lifting a pencil almost always drags the tip a few px, which would reset
+	 * the anchor right at the end — this remembers the hold that preceded it. */
+	private holdBeforeReset = 0;
+	private holdResetAt = 0;
 	private tapeStart: { x: number; y: number } | null = null;
 	private tapeEnd: { x: number; y: number } | null = null;
 	private tapePreviewEl: HTMLElement;
@@ -2858,6 +2889,8 @@ class MarkerOverlay extends ToolOverlay {
 					highlight: mode === "highlight",
 				};
 				this.holdAnchor = { x: e.clientX, y: e.clientY, t: Date.now() };
+				this.holdBeforeReset = 0;
+				this.holdResetAt = 0;
 			}
 			e.preventDefault();
 		});
@@ -2886,7 +2919,10 @@ class MarkerOverlay extends ToolOverlay {
 			// (now - anchor.t) is how long the pen has been sitting still.
 			const ha = this.holdAnchor;
 			if (ha && Math.hypot(e.clientX - ha.x, e.clientY - ha.y) > QUICKSHAPE_JITTER_PX) {
-				this.holdAnchor = { x: e.clientX, y: e.clientY, t: Date.now() };
+				const now = Date.now();
+				this.holdBeforeReset = now - ha.t;
+				this.holdResetAt = now;
+				this.holdAnchor = { x: e.clientX, y: e.clientY, t: now };
 			}
 			this.redraw();
 			e.preventDefault();
@@ -2958,7 +2994,7 @@ class MarkerOverlay extends ToolOverlay {
 
 	private outlineFor(stroke: PencilStroke, scale: number): number[][] {
 		return getStroke(
-			stroke.worldPts.map(([x, y, p]) => [x * scale, y * scale, p]),
+			smoothInkPts(stroke.worldPts).map(([x, y, p]) => [x * scale, y * scale, p]),
 			{
 				size: stroke.size * scale,
 				thinning: 0, // uniform width — no pressure/speed variation
@@ -3042,7 +3078,15 @@ class MarkerOverlay extends ToolOverlay {
 	private maybeSnapShape(stroke: PencilStroke) {
 		const ha = this.holdAnchor;
 		this.holdAnchor = null;
-		if (!ha || Date.now() - ha.t < QUICKSHAPE_HOLD_MS) return;
+		if (!ha) return;
+		const now = Date.now();
+		const held = now - ha.t >= QUICKSHAPE_HOLD_MS;
+		// Pencil lift-off usually drags the tip a few px, resetting the anchor at
+		// the last instant — honor a completed hold that ended within the final
+		// ~200ms (the twitch), otherwise pen input can never satisfy the hold.
+		const heldBeforeLiftTwitch =
+			now - this.holdResetAt < 200 && this.holdBeforeReset >= QUICKSHAPE_HOLD_MS;
+		if (!held && !heldBeforeLiftTwitch) return;
 		const snapped = quickShapeFor(stroke.worldPts);
 		if (snapped) {
 			stroke.worldPts = snapped.pts;
@@ -4766,7 +4810,7 @@ function buildStrokesSvg(strokes: PencilStroke[]): InkSvg | null {
 				`<path d="${d}" fill="none" stroke="currentColor" stroke-width="${stroke.size}"${opacity} stroke-linecap="${cap}" stroke-linejoin="${join}"/>`
 			);
 		} else {
-			const outline = getStroke(stroke.worldPts, {
+			const outline = getStroke(smoothInkPts(stroke.worldPts), {
 				size: stroke.size,
 				thinning: 0,
 				smoothing: INK_SMOOTHING,
