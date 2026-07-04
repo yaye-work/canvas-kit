@@ -126,8 +126,9 @@ interface TapePattern {
 	/** SVG <pattern> definition; angle = tape rotation in degrees. */
 	defs: (pid: string, angle: number) => string;
 	/** 3-slice design: fixed start cap, tiling middle, fixed end cap.
-	 * When set, `base`/`defs` are only used as a fallback. */
-	slices?: { start: TapeSlice; mid: TapeSlice; end: TapeSlice };
+	 * `cropY` trims that many design-units of margin off the top AND bottom of
+	 * every slice. When set, `base`/`defs` are only used as a fallback. */
+	slices?: { start: TapeSlice; mid: TapeSlice; end: TapeSlice; cropY?: number };
 }
 
 const svgUri = (svg: string) => `data:image/svg+xml,${encodeURIComponent(svg)}`;
@@ -199,7 +200,9 @@ const TAPE_PATTERNS: TapePattern[] = [
 		label: "Puzzle",
 		base: "#5F93C2",
 		defs: () => "",
-		slices: { start: PUZZLE_START, mid: PUZZLE_MID, end: PUZZLE_END },
+		// cropY trims the slices' blue margin down to the ~6% of the design
+		// reference (the files carry ~10.5%).
+		slices: { start: PUZZLE_START, mid: PUZZLE_MID, end: PUZZLE_END, cropY: 10.6 },
 	},
 ];
 
@@ -5015,6 +5018,11 @@ function buildTapeSvg(
 	imgW = 0,
 	imgH = 0
 ): InkSvg | null {
+	// Normalize the drag direction: a right-to-left drag would rotate the whole
+	// strip 180°, putting the start-cap artwork at the visual END (and flipping
+	// directional patterns upside down). Reading left-to-right keeps 3-slice
+	// caps where they belong regardless of how the strip was dragged.
+	if (b.x < a.x) [a, b] = [b, a];
 	const len = Math.hypot(b.x - a.x, b.y - a.y);
 	if (len < 20) return null;
 	const ux = (b.x - a.x) / len;
@@ -5066,7 +5074,9 @@ function buildTapeSvg(
 	// Built-in 3-slice designs: fixed start/end caps, tiling middle.
 	const sliced = TAPE_PATTERNS.find((p) => p.id === patternId)?.slices;
 	if (patternId !== CUSTOM_TAPE_ID && sliced) {
-		const sc = thickness / sliced.mid[2];
+		const cropY = sliced.cropY ?? 0;
+		const effH = sliced.mid[2] - 2 * cropY; // visible design height after crop
+		const sc = thickness / effH;
 		const startL = sliced.start[1] * sc;
 		const endL = sliced.end[1] * sc;
 		// Stretch the tile so an INTEGER number of tiles fits between the caps —
@@ -5076,17 +5086,26 @@ function buildTapeSvg(
 		const tiles = Math.max(1, Math.round(midLen / natural));
 		const tileL = midLen > 0 ? midLen / tiles : natural;
 		const half2 = thickness / 2;
+		// Each slice is placed as a nested <svg> whose viewBox crops the blue
+		// margin. Tiles are stamped individually (with a hair of overlap) rather
+		// than via <pattern> — pattern tiles are clipped at their boundaries,
+		// which shows as a thin antialiasing seam between repeats.
+		const slice = (s: TapeSlice, x: number, w: number) =>
+			`<svg x="${r2(x)}" y="${r2(-half2)}" width="${r2(w)}" height="${thickness}" viewBox="0 ${r2(cropY)} ${s[1]} ${r2(effH)}" preserveAspectRatio="none">` +
+			`<image href="${svgUri(s[0])}" width="${s[1]}" height="${s[2]}"/></svg>`;
+		let mids = "";
+		for (let i = 0; i < tiles && midLen > 0; i++) {
+			const overlap = i < tiles - 1 ? 0.6 : 0;
+			mids += slice(sliced.mid, startL + i * tileL, tileL + overlap);
+		}
 		const svg =
 			`<svg class="${INK_MARK}" xmlns="http://www.w3.org/2000/svg" viewBox="${r2(minX)} ${r2(minY)} ${width} ${height}" width="${width}" height="${height}">` +
-			`<defs><clipPath id="${pid}c"><path d="${d}"/></clipPath>` +
-			`<pattern id="${pid}" x="${r2(startL)}" width="${r2(tileL)}" height="${thickness}" patternUnits="userSpaceOnUse">` +
-			`<image href="${svgUri(sliced.mid[0])}" width="${r2(tileL)}" height="${thickness}" preserveAspectRatio="none"/>` +
-			`</pattern></defs>` +
+			`<defs><clipPath id="${pid}c"><path d="${d}"/></clipPath></defs>` +
 			`<g clip-path="url(#${pid}c)">` +
 			`<g transform="translate(${r2(a.x)} ${r2(a.y)}) rotate(${angle})">` +
-			`<rect x="${r2(startL)}" y="${r2(-half2)}" width="${r2(Math.max(0, len - startL - endL))}" height="${thickness}" fill="url(#${pid})"/>` +
-			`<image href="${svgUri(sliced.start[0])}" x="0" y="${r2(-half2)}" width="${r2(startL)}" height="${thickness}" preserveAspectRatio="none"/>` +
-			`<image href="${svgUri(sliced.end[0])}" x="${r2(len - endL)}" y="${r2(-half2)}" width="${r2(endL)}" height="${thickness}" preserveAspectRatio="none"/>` +
+			mids +
+			slice(sliced.start, 0, startL) +
+			slice(sliced.end, len - endL, endL) +
 			`</g></g></svg>`;
 		return { svg, box: { x: Math.round(minX), y: Math.round(minY), width, height } };
 	}
