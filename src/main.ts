@@ -23,6 +23,8 @@ interface CanvasPencilSettings {
 	toolbarScale: number; // scale factor for Canvas Kit's own toolbar (1 = default)
 	inkSmoothing: number; // perfect-freehand smoothing amount (0 = raw, 1 = very smooth)
 	showTableTool: boolean; // show the table button in the toolbar
+	brushMin: number; // smallest brush size (first slider mark)
+	brushMax: number; // biggest brush size (last slider mark)
 }
 
 const DEFAULT_SETTINGS: CanvasPencilSettings = {
@@ -34,6 +36,8 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	toolbarScale: 1.25,
 	inkSmoothing: 0.5,
 	showTableTool: true,
+	brushMin: 2,
+	brushMax: 28,
 };
 
 // Live copy of the ink-smoothing setting, module-level because the ink SVG
@@ -84,11 +88,20 @@ const INK_MARK = "cp-ink"; // class marker inside stored SVG text
 // Sizes are evenly spaced (6.5 apart, rounded per mark) but the DESIGN places the ticks with
 // growing gaps. Positions are the EXACT mark centers from the design file
 // (156.306px container), expressed as fractions of the track width.
-const STROKE_PRESETS = [2, 9, 15, 22, 28];
-const STROKE_MIN = 2;
-const STROKE_MAX = 28;
+// The range is user-configurable (settings: smallest/biggest brush size); the
+// five preset marks spread evenly across it, recomputed on change.
+let STROKE_MIN = 2;
+let STROKE_MAX = 28;
 /** uniform gap between consecutive presets */
-const STROKE_STEP = (STROKE_MAX - STROKE_MIN) / (STROKE_PRESETS.length - 1);
+let STROKE_STEP = (STROKE_MAX - STROKE_MIN) / 4;
+let STROKE_PRESETS = [2, 9, 15, 22, 28];
+function setStrokeRange(min: number, max: number) {
+	STROKE_MIN = Math.max(1, Math.round(min));
+	STROKE_MAX = Math.max(STROKE_MIN + 4, Math.round(max));
+	STROKE_STEP = (STROKE_MAX - STROKE_MIN) / 4;
+	// Same rounding as the slider's value mapping, so tick highlighting matches.
+	STROKE_PRESETS = [0, 1, 2, 3, 4].map((i) => Math.round(STROKE_MIN + i * STROKE_STEP));
+}
 /** mark i's center as a fraction (0..1) of the track — 5 marks, evenly spaced
  * between the design's original first (0.058) and last (0.944) positions */
 const STROKE_MARK_FRAC = [0.058267, 0.279584, 0.500901, 0.722217, 0.943534];
@@ -709,10 +722,12 @@ export default class CanvasPencilPlugin extends Plugin {
 		// Anyone still on 4 was on the default, so move them to the new first mark.
 		if (this.settings.strokeSize === 4) this.settings.strokeSize = 2;
 		setInkSmoothing(this.settings.inkSmoothing);
+		setStrokeRange(this.settings.brushMin, this.settings.brushMax);
 	}
 
 	async saveSettings() {
 		setInkSmoothing(this.settings.inkSmoothing);
+		setStrokeRange(this.settings.brushMin, this.settings.brushMax);
 		await this.saveData(this.settings);
 	}
 }
@@ -1572,6 +1587,25 @@ class CanvasToolbar {
 			this.markerSize = Math.max(STROKE_MIN, Math.min(STROKE_MAX, this.markerSize));
 			slider.value = String(Math.round(idx2val(size2i(this.markerSize))));
 			placeChip();
+			// Tap anywhere on the track → the thumb teleports there (native range
+			// inputs on iOS only respond to dragging the thumb itself). The value
+			// is set on pointerdown, so the thumb lands under the finger and a
+			// continuing drag keeps working natively.
+			const frac2idx = (f: number) => {
+				const m = STROKE_MARK_FRAC;
+				if (f <= m[0]) return 0;
+				for (let k = 0; k < m.length - 1; k++) {
+					if (f <= m[k + 1]) return k + (f - m[k]) / (m[k + 1] - m[k]);
+				}
+				return m.length - 1;
+			};
+			slider.addEventListener("pointerdown", (e) => {
+				const r = slider.getBoundingClientRect();
+				if (r.width <= 0) return;
+				const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+				slider.value = String(Math.round(idx2val(frac2idx(f))));
+				slider.dispatchEvent(new Event("input"));
+			});
 			slider.addEventListener("input", () => {
 				let i = val2idx(Number(slider.value));
 				const nearest = Math.round(i);
@@ -2100,6 +2134,12 @@ class CanvasToolbar {
 			});
 			const picker = wheel.createEl("input", { type: "color" });
 			picker.value = /^#[0-9a-f]{6}$/i.test(current) ? current : "#1e1e1e";
+			// Open the native picker on pointerdown — waiting for the synthesized
+			// click costs ~300ms of tap delay on touch devices.
+			picker.addEventListener("pointerdown", (e) => {
+				e.preventDefault();
+				picker.click();
+			});
 			picker.addEventListener("input", () => {
 				setColor(picker.value);
 				this.markStyleActive(el, wheel);
@@ -5009,14 +5049,29 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Default marker size")
-			.setDesc("Stroke width in canvas units.")
+			.setName("Smallest brush size")
+			.setDesc("The brush slider's first mark. The five preset marks spread evenly between smallest and biggest.")
 			.addSlider((s) =>
 				s
-					.setLimits(2, 30, 1)
-					.setValue(this.plugin.settings.strokeSize)
+					.setLimits(1, 15, 1)
+					.setDynamicTooltip()
+					.setValue(this.plugin.settings.brushMin)
 					.onChange(async (v) => {
-						this.plugin.settings.strokeSize = v;
+						this.plugin.settings.brushMin = v;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Biggest brush size")
+			.setDesc("The brush slider's last mark.")
+			.addSlider((s) =>
+				s
+					.setLimits(10, 80, 1)
+					.setDynamicTooltip()
+					.setValue(this.plugin.settings.brushMax)
+					.onChange(async (v) => {
+						this.plugin.settings.brushMax = v;
 						await this.plugin.saveSettings();
 					})
 			);
@@ -5095,6 +5150,21 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 					this.plugin.settings.tapeImage = null;
 					await this.plugin.saveSettings();
 					new Notice("Custom tape image removed.");
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Reset to defaults")
+			.setDesc("Restore every Canvas Kit setting above to its default (including the custom tape image).")
+			.addButton((b) =>
+				b.setButtonText("Reset").setWarning().onClick(async () => {
+					this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
+					await this.plugin.saveSettings();
+					this.plugin.applyBottomBarVisibility();
+					this.plugin.applyToolbarScale();
+					this.plugin.rebuildToolbars();
+					this.display(); // re-render the tab with the fresh values
+					new Notice("Canvas Kit: settings reset to defaults.");
 				})
 			);
 	}
