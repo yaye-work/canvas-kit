@@ -116,52 +116,29 @@ const strokeIdxToFrac = (i: number) => {
 
 // ---------- Tape patterns ----------
 
-/** One slice of a 3-slice tape design: [svg markup, natural width, natural height]. */
-type TapeSlice = [string, number, number];
-
 interface TapePattern {
 	id: string;
 	label: string;
-	base: string | (() => string); // solid base color (function = resolved at use time)
-	/** SVG <pattern> definition; angle = tape rotation in degrees. */
-	defs: (pid: string, angle: number) => string;
-	/** 3-slice design: fixed start cap, tiling middle, fixed end cap.
-	 * `cropY` trims that many design-units of margin off the top AND bottom of
-	 * every slice. When set, `base`/`defs` are only used as a fallback. */
-	slices?: { start: TapeSlice; mid: TapeSlice; end: TapeSlice; cropY?: number };
+	/** Solid base color behind the pattern (function = resolved at use time).
+	 * Doubles as a fallback fill if the CSS layer doesn't render. */
+	base?: string | (() => string);
+	/** SVG <pattern> definition (accent grid); angle = tape rotation in degrees. */
+	defs?: (pid: string, angle: number) => string;
+	/** Inline CSS background declaration(s), rendered verbatim via <foreignObject>
+	 * — lets a pattern use conic-gradient etc. Takes precedence over `defs`. */
+	css?: string;
+	/** Smaller-scale CSS for the toolbar swatch (falls back to `css`). */
+	swatch?: string;
 }
 
-const svgUri = (svg: string) => `data:image/svg+xml,${encodeURIComponent(svg)}`;
-
-// "Puzzle" tape (user design): interlocking cream tabs on blue, drawn as three
-// slices so the ends always look finished and only the middle repeats.
-const PUZZLE_START: TapeSlice = [
-	'<svg width="98" height="226" viewBox="0 0 98 226" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="98" height="226" fill="#5F93C2"/><path d="M92.7964 23.6804C95.5151 23.6805 97.7417 25.7813 97.9448 28.448V196.781C97.7422 199.448 95.5154 201.549 92.7964 201.55H67.5532C64.7007 201.549 62.3883 199.237 62.3882 196.385V171.14C62.3881 168.288 60.0757 165.975 57.2231 165.975H31.979C29.1265 165.975 26.8141 163.663 26.814 160.81V135.567C26.814 132.715 29.1265 130.402 31.979 130.402H57.2231C60.0757 130.402 62.3881 128.09 62.3882 125.237V99.9929C62.3881 97.1404 60.0757 94.828 57.2231 94.8279H31.979C29.1265 94.8278 26.814 92.5154 26.814 89.6628V64.4197C26.8141 61.5672 29.1265 59.2547 31.979 59.2546H57.2231C60.0757 59.2546 62.3881 56.9422 62.3882 54.0896V28.8455C62.3883 25.9929 64.7007 23.6805 67.5532 23.6804H92.7964Z" fill="#EBE1D4"/></svg>',
-	98,
-	226,
-];
-const PUZZLE_MID: TapeSlice = [
-	'<svg width="72" height="226" viewBox="0 0 72 226" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="72" height="226" fill="#5F93C2"/><path d="M65.9824 23.6804C68.8349 23.6804 71.1472 25.993 71.1475 28.8455V54.0896C71.1475 54.3646 71.1695 54.6348 71.2109 54.8982V170.332C71.1695 170.595 71.1475 170.865 71.1475 171.14V196.385C71.1475 199.237 68.8351 201.55 65.9824 201.55H40.7402C37.8876 201.55 35.5742 199.237 35.5742 196.385V171.14C35.574 168.288 33.2617 165.975 30.4092 165.975H5.16602C2.31347 165.975 0.000181398 168.288 0 171.14V54.0896C0 56.9423 2.31336 59.2546 5.16602 59.2546H30.4092C33.2618 59.2546 35.5742 56.9423 35.5742 54.0896V28.8455C35.5745 25.993 37.8877 23.6804 40.7402 23.6804H65.9824Z" fill="#EBE1D4"/></svg>',
-	72,
-	226,
-];
-const PUZZLE_END: TapeSlice = [
-	'<svg width="63" height="226" viewBox="0 0 63 226" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="63" height="226" fill="#5F93C2"/><path d="M0 125.237C0.000247358 128.089 2.3127 130.402 5.16504 130.402H30.4092C33.2618 130.402 35.5742 132.714 35.5742 135.567V160.809C35.5742 163.662 33.2618 165.975 30.4092 165.975H5.16504C2.31255 165.976 0 168.288 0 171.14V125.237ZM0 54.0896C0.000216441 56.9419 2.31268 59.2544 5.16504 59.2546H30.4092C33.2618 59.2546 35.5742 61.567 35.5742 64.4197V89.6628C35.574 92.5153 33.2618 94.8279 30.4092 94.8279H5.16504C2.31255 94.8281 0 97.1404 0 99.9929V54.0896Z" fill="#EBE1D4"/></svg>',
-	63,
-	226,
-];
-
-/** Swatch background built from the pattern's OWN base + defs, so the sub-bar
- * icon is always pixel-identical to what the tape will actually look like. */
+/** Swatch background for the sub-bar icon — the pattern's own CSS (scaled), or
+ * an SVG-pattern preview for `defs`-based patterns. */
 function tapeSwatchCss(p: TapePattern): string {
-	if (p.slices) {
-		// 3-slice designs: preview with the tiling middle slice.
-		return `background-image:url("${svgUri(p.slices.mid[0])}");background-size:cover;background-position:center;`;
-	}
-	const base = typeof p.base === "function" ? p.base() : p.base;
+	if (p.css) return p.swatch ?? p.css;
+	const base = typeof p.base === "function" ? p.base() : (p.base ?? "#ffffff");
 	const svg =
 		`<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22">` +
-		`<defs>${p.defs("sw", 0)}</defs>` +
+		`<defs>${p.defs ? p.defs("sw", 0) : ""}</defs>` +
 		`<rect width="22" height="22" fill="${base}"/>` +
 		`<rect width="22" height="22" fill="url(#sw)"/>` +
 		`</svg>`;
@@ -196,13 +173,47 @@ const TAPE_PATTERNS: TapePattern[] = [
 			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><path d="M16 0H0V16" fill="none" stroke="${tapeAccentLine()}" stroke-width="1.5"/></pattern>`,
 	},
 	{
-		id: "puzzle",
-		label: "Puzzle",
-		base: "#5F93C2",
-		defs: () => "",
-		// cropY trims the slices' blue margin down to the ~6% of the design
-		// reference (the files carry ~10.5%).
-		slices: { start: PUZZLE_START, mid: PUZZLE_MID, end: PUZZLE_END, cropY: 10.6 },
+		id: "confetti",
+		label: "Confetti",
+		base: "#c8c96b",
+		css:
+			"--s:30px;--c1:#c8c96b;--c2:#fea0bb;background:" +
+			"conic-gradient(at 60% 60%,var(--c1) 75%,#0000 0) 0 0/calc(5*var(--s)/2) calc(5*var(--s)/2)," +
+			"repeating-conic-gradient(var(--c1) 0 25%,#0000 0 50%) 0 0/calc(5*var(--s)) calc(5*var(--s))," +
+			"repeating-conic-gradient(var(--c2) 0 25%,var(--c1) 0 50%) 0 0/var(--s) var(--s);",
+		swatch:
+			"--s:6px;--c1:#c8c96b;--c2:#fea0bb;background:" +
+			"conic-gradient(at 60% 60%,var(--c1) 75%,#0000 0) 0 0/calc(5*var(--s)/2) calc(5*var(--s)/2)," +
+			"repeating-conic-gradient(var(--c1) 0 25%,#0000 0 50%) 0 0/calc(5*var(--s)) calc(5*var(--s))," +
+			"repeating-conic-gradient(var(--c2) 0 25%,var(--c1) 0 50%) 0 0/var(--s) var(--s);",
+	},
+	{
+		id: "checker",
+		label: "Checkerboard",
+		base: "#ffffff",
+		css:
+			"background-color:#fff;background-image:" +
+			"linear-gradient(45deg,#ccc 25%,transparent 25%,transparent 75%,#ccc 75%,#ccc)," +
+			"linear-gradient(45deg,#ccc 25%,#fff 25%,#fff 75%,#ccc 75%,#ccc);" +
+			"background-size:30px 30px;background-position:0 0,15px 15px;",
+		swatch:
+			"background-color:#fff;background-image:" +
+			"linear-gradient(45deg,#ccc 25%,transparent 25%,transparent 75%,#ccc 75%,#ccc)," +
+			"linear-gradient(45deg,#ccc 25%,#fff 25%,#fff 75%,#ccc 75%,#ccc);" +
+			"background-size:11px 11px;background-position:0 0,5.5px 5.5px;",
+	},
+	{
+		id: "gingham",
+		label: "Gingham",
+		base: "hsl(50,60%,65%)",
+		css:
+			"font-size:16px;background:" +
+			"conic-gradient(transparent 25%,hsl(50,60%,65%) 0 50%,transparent 0 75%,#000 0) 0/4em 4em," +
+			"repeating-conic-gradient(hsl(50,60%,65%) 0 25%,#000 0 50%) 0/.5em .5em;",
+		swatch:
+			"font-size:6px;background:" +
+			"conic-gradient(transparent 25%,hsl(50,60%,65%) 0 50%,transparent 0 75%,#000 0) 0/4em 4em," +
+			"repeating-conic-gradient(hsl(50,60%,65%) 0 25%,#000 0 50%) 0/.5em .5em;",
 	},
 ];
 
@@ -5071,41 +5082,27 @@ function buildTapeSvg(
 	const angle = r2((Math.atan2(uy, ux) * 180) / Math.PI);
 	const pid = `cpg${randomId().slice(0, 6)}`;
 
-	// Built-in 3-slice designs: fixed start/end caps, tiling middle.
-	const sliced = TAPE_PATTERNS.find((p) => p.id === patternId)?.slices;
-	if (patternId !== CUSTOM_TAPE_ID && sliced) {
-		const cropY = sliced.cropY ?? 0;
-		const effH = sliced.mid[2] - 2 * cropY; // visible design height after crop
-		const sc = thickness / effH;
-		const startL = sliced.start[1] * sc;
-		const endL = sliced.end[1] * sc;
-		// Stretch the tile so an INTEGER number of tiles fits between the caps —
-		// the middle then interlocks seamlessly with both caps at any length.
-		const midLen = Math.max(0, len - startL - endL);
-		const natural = Math.max(4, sliced.mid[1] * sc);
-		const tiles = Math.max(1, Math.round(midLen / natural));
-		const tileL = midLen > 0 ? midLen / tiles : natural;
+	// CSS-background patterns (conic-gradients etc.): the tape SVG mounts inline,
+	// so Chromium renders the CSS verbatim inside a <foreignObject>. A base-color
+	// fill sits behind as a fallback; both are clipped to the torn edge and the
+	// content is rotated to the drag direction.
+	const cssPat =
+		patternId !== CUSTOM_TAPE_ID
+			? TAPE_PATTERNS.find((p) => p.id === patternId)
+			: undefined;
+	if (cssPat?.css) {
 		const half2 = thickness / 2;
-		// Each slice is placed as a nested <svg> whose viewBox crops the blue
-		// margin. Tiles are stamped individually (with a hair of overlap) rather
-		// than via <pattern> — pattern tiles are clipped at their boundaries,
-		// which shows as a thin antialiasing seam between repeats.
-		const slice = (s: TapeSlice, x: number, w: number) =>
-			`<svg x="${r2(x)}" y="${r2(-half2)}" width="${r2(w)}" height="${thickness}" viewBox="0 ${r2(cropY)} ${s[1]} ${r2(effH)}" preserveAspectRatio="none">` +
-			`<image href="${svgUri(s[0])}" width="${s[1]}" height="${s[2]}"/></svg>`;
-		let mids = "";
-		for (let i = 0; i < tiles && midLen > 0; i++) {
-			const overlap = i < tiles - 1 ? 0.6 : 0;
-			mids += slice(sliced.mid, startL + i * tileL, tileL + overlap);
-		}
+		const fb = typeof cssPat.base === "function" ? cssPat.base() : (cssPat.base ?? "#fff");
+		const style = `width:${r2(len)}px;height:${thickness}px;${cssPat.css}`;
 		const svg =
 			`<svg class="${INK_MARK}" xmlns="http://www.w3.org/2000/svg" viewBox="${r2(minX)} ${r2(minY)} ${width} ${height}" width="${width}" height="${height}">` +
 			`<defs><clipPath id="${pid}c"><path d="${d}"/></clipPath></defs>` +
 			`<g clip-path="url(#${pid}c)">` +
+			`<path d="${d}" fill="${fb}"/>` +
 			`<g transform="translate(${r2(a.x)} ${r2(a.y)}) rotate(${angle})">` +
-			mids +
-			slice(sliced.start, 0, startL) +
-			slice(sliced.end, len - endL, endL) +
+			`<foreignObject x="0" y="${r2(-half2)}" width="${r2(len)}" height="${thickness}">` +
+			`<div xmlns="http://www.w3.org/1999/xhtml" style="${style}"></div>` +
+			`</foreignObject>` +
 			`</g></g></svg>`;
 		return { svg, box: { x: Math.round(minX), y: Math.round(minY), width, height } };
 	}
@@ -5151,9 +5148,9 @@ function buildTapeSvg(
 			`<image href="${customImage}" width="${CUSTOM_TILE}" height="${CUSTOM_TILE}" preserveAspectRatio="xMidYMid slice"/></pattern>`;
 	} else {
 		const pattern =
-			TAPE_PATTERNS.find((p) => p.id === patternId) ?? TAPE_PATTERNS[0];
-		base = typeof pattern.base === "function" ? pattern.base() : pattern.base;
-		defs = pattern.defs(pid, Number(angle));
+			TAPE_PATTERNS.find((p) => p.id === patternId && p.defs) ?? TAPE_PATTERNS[0];
+		base = typeof pattern.base === "function" ? pattern.base() : (pattern.base ?? "#fff");
+		defs = pattern.defs ? pattern.defs(pid, Number(angle)) : "";
 	}
 
 	const svg =
