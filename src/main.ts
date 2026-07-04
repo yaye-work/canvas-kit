@@ -877,6 +877,7 @@ class CanvasToolbar {
 	markerColor: string;
 	highlightColor: string = HIGHLIGHT_PALETTE[3]; // classic yellow
 	markerSize: number;
+	tapeSize: number = 80; // tape strip thickness in canvas units
 	tapePattern = TAPE_PATTERNS[0].id;
 	textSize: number; // default font size for new text (resize scales it after)
 	activeTextEditor: TextEditorHandle | null = null;
@@ -1539,83 +1540,26 @@ class CanvasToolbar {
 		}));
 		sub.addEventListener("pointerenter", () => this.overlay?.hideHint());
 
-		// Tape has no stroke width — its thickness comes from the drag.
-		if (this.markerMode !== "tape") {
-			this.sizeSectionEl = sub.createDiv({
-				cls: "canvas-pencil-section canvas-pencil-size-inline",
-			});
-			// Island 1: a real slider layered over 6 evenly spaced preset bars —
-			// it slides continuously and snaps onto a preset when it gets close.
-			const sliderIsland = this.sizeSectionEl.createDiv({
-				cls: "canvas-pencil-island canvas-pencil-size-slider",
-			});
-			// Island 2: live brush preview dot.
-			const previewIsland = this.sizeSectionEl.createDiv({
-				cls: "canvas-pencil-island canvas-pencil-size-previewbox",
-			});
-			const preview = previewIsland.createDiv({ cls: "canvas-pencil-size-preview" });
-			const tickEls = new Map<number, HTMLElement>();
-			const range = STROKE_MAX - STROKE_MIN;
-			const updatePreview = () => {
-				const d = Math.round(4 + ((this.markerSize - STROKE_MIN) / range) * 12);
-				preview.style.width = preview.style.height = `${d}px`;
-				for (const [p, el] of tickEls) el.toggleClass("is-active", p === this.markerSize);
-			};
-			// The slider value (0..1000) is the continuous preset index scaled up;
-			// both marks and chip position from the SAME design fractions, so the
-			// chip always lands exactly on a mark when snapped.
-			const N = STROKE_PRESETS.length;
-			const val2idx = (v: number) => (v / 1000) * (N - 1);
-			const idx2val = (i: number) => (i / (N - 1)) * 1000;
-			const slider = sliderIsland.createEl("input", {
-				type: "range",
-				attr: { min: "0", max: "1000", step: "1", "aria-label": "Stroke size" },
-			});
-			// The chip "thumb" is OUR element (the native one is invisible).
-			const chip = sliderIsland.createDiv({ cls: "canvas-pencil-size-chip" });
-			STROKE_PRESETS.forEach((p, i) => {
-				const tick = sliderIsland.createDiv({ cls: "canvas-pencil-size-tick" });
-				tick.style.left = `${STROKE_MARK_FRAC[i] * 100}%`;
-				tickEls.set(p, tick);
-			});
-			const placeChip = () => {
-				chip.style.left = `${strokeIdxToFrac(val2idx(Number(slider.value))) * 100}%`;
-			};
-			const size2i = (size: number) => (size - STROKE_MIN) / STROKE_STEP;
-			this.markerSize = Math.max(STROKE_MIN, Math.min(STROKE_MAX, this.markerSize));
-			slider.value = String(Math.round(idx2val(size2i(this.markerSize))));
-			placeChip();
-			// Tap anywhere on the track → the thumb teleports there (native range
-			// inputs on iOS only respond to dragging the thumb itself). The value
-			// is set on pointerdown, so the thumb lands under the finger and a
-			// continuing drag keeps working natively.
-			const frac2idx = (f: number) => {
-				const m = STROKE_MARK_FRAC;
-				if (f <= m[0]) return 0;
-				for (let k = 0; k < m.length - 1; k++) {
-					if (f <= m[k + 1]) return k + (f - m[k]) / (m[k + 1] - m[k]);
-				}
-				return m.length - 1;
-			};
-			slider.addEventListener("pointerdown", (e) => {
-				const r = slider.getBoundingClientRect();
-				if (r.width <= 0) return;
-				const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-				slider.value = String(Math.round(idx2val(frac2idx(f))));
-				slider.dispatchEvent(new Event("input"));
-			});
-			slider.addEventListener("input", () => {
-				let i = val2idx(Number(slider.value));
-				const nearest = Math.round(i);
-				if (Math.abs(i - nearest) <= 0.3) {
-					i = nearest; // magnetic: settle onto the preset bar
-					slider.value = String(Math.round(idx2val(nearest)));
-				}
-				this.markerSize = Math.round(STROKE_MIN + i * STROKE_STEP);
-				placeChip();
-				updatePreview();
-			});
-			updatePreview();
+		this.sizeSectionEl = sub.createDiv({
+			cls: "canvas-pencil-section canvas-pencil-size-inline",
+		});
+		if (this.markerMode === "tape") {
+			// Tape width slider (same design as the brush slider).
+			this.buildSizeSlider(
+				this.sizeSectionEl,
+				TAPE_MIN,
+				TAPE_MAX,
+				() => this.tapeSize,
+				(v) => (this.tapeSize = v)
+			);
+		} else {
+			this.buildSizeSlider(
+				this.sizeSectionEl,
+				STROKE_MIN,
+				STROKE_MAX,
+				() => this.markerSize,
+				(v) => (this.markerSize = v)
+			);
 		}
 
 		this.styleSectionEl = sub.createDiv({
@@ -1623,6 +1567,91 @@ class CanvasToolbar {
 		});
 		this.renderStyleSection();
 		this.applyScale();
+	}
+
+	/**
+	 * The Procreate-style size slider: a real range input layered over 5 preset
+	 * ticks placed at the design's mark fractions; slides continuously, snaps
+	 * magnetically onto a preset, tap-anywhere teleports the thumb, and a
+	 * preview dot mirrors the current size.
+	 */
+	private buildSizeSlider(
+		parent: HTMLElement,
+		min: number,
+		max: number,
+		get: () => number,
+		set: (v: number) => void
+	) {
+		const sliderIsland = parent.createDiv({
+			cls: "canvas-pencil-island canvas-pencil-size-slider",
+		});
+		const previewIsland = parent.createDiv({
+			cls: "canvas-pencil-island canvas-pencil-size-previewbox",
+		});
+		const preview = previewIsland.createDiv({ cls: "canvas-pencil-size-preview" });
+		const step = (max - min) / 4;
+		const presets = [0, 1, 2, 3, 4].map((i) => Math.round(min + i * step));
+		const tickEls = new Map<number, HTMLElement>();
+		const updatePreview = () => {
+			const d = Math.round(4 + ((get() - min) / (max - min)) * 12);
+			preview.style.width = preview.style.height = `${d}px`;
+			for (const [p, el] of tickEls) el.toggleClass("is-active", p === get());
+		};
+		// The slider value (0..1000) is the continuous preset index scaled up;
+		// both marks and chip position from the SAME design fractions, so the
+		// chip always lands exactly on a mark when snapped.
+		const N = presets.length;
+		const val2idx = (v: number) => (v / 1000) * (N - 1);
+		const idx2val = (i: number) => (i / (N - 1)) * 1000;
+		const slider = sliderIsland.createEl("input", {
+			type: "range",
+			attr: { min: "0", max: "1000", step: "1", "aria-label": "Size" },
+		});
+		// The chip "thumb" is OUR element (the native one is invisible).
+		const chip = sliderIsland.createDiv({ cls: "canvas-pencil-size-chip" });
+		presets.forEach((p, i) => {
+			const tick = sliderIsland.createDiv({ cls: "canvas-pencil-size-tick" });
+			tick.style.left = `${STROKE_MARK_FRAC[i] * 100}%`;
+			tickEls.set(p, tick);
+		});
+		const placeChip = () => {
+			chip.style.left = `${strokeIdxToFrac(val2idx(Number(slider.value))) * 100}%`;
+		};
+		const size2i = (size: number) => (size - min) / step;
+		set(Math.max(min, Math.min(max, get())));
+		slider.value = String(Math.round(idx2val(size2i(get()))));
+		placeChip();
+		// Tap anywhere on the track → the thumb teleports there (native range
+		// inputs on iOS only respond to dragging the thumb itself). The value
+		// is set on pointerdown, so the thumb lands under the finger and a
+		// continuing drag keeps working natively.
+		const frac2idx = (f: number) => {
+			const m = STROKE_MARK_FRAC;
+			if (f <= m[0]) return 0;
+			for (let k = 0; k < m.length - 1; k++) {
+				if (f <= m[k + 1]) return k + (f - m[k]) / (m[k + 1] - m[k]);
+			}
+			return m.length - 1;
+		};
+		slider.addEventListener("pointerdown", (e) => {
+			const r = slider.getBoundingClientRect();
+			if (r.width <= 0) return;
+			const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+			slider.value = String(Math.round(idx2val(frac2idx(f))));
+			slider.dispatchEvent(new Event("input"));
+		});
+		slider.addEventListener("input", () => {
+			let i = val2idx(Number(slider.value));
+			const nearest = Math.round(i);
+			if (Math.abs(i - nearest) <= 0.3) {
+				i = nearest; // magnetic: settle onto the preset bar
+				slider.value = String(Math.round(idx2val(nearest)));
+			}
+			set(Math.round(min + i * step));
+			placeChip();
+			updatePreview();
+		});
+		updatePreview();
 	}
 
 	// --- marquee sub toolbar: [rectangle | freehand lasso] ---
@@ -2836,18 +2865,23 @@ abstract class ToolOverlay {
 const HIGHLIGHT_OPACITY = 0.45;
 const HIGHLIGHT_SIZE_FACTOR = 3;
 const TAPE_THICKNESS = 80;
+// Tape width slider range (5 marks spread evenly; default sits on the middle).
+const TAPE_MIN = 30;
+const TAPE_MAX = 130;
 
 class MarkerOverlay extends ToolOverlay {
 	private canvasEl: HTMLCanvasElement;
 	private ctx: CanvasRenderingContext2D;
 	private current: PencilStroke | null = null;
 	/** Where the pen last actually moved (client px) — QuickShape hold detector. */
-	private holdAnchor: { x: number; y: number; t: number } | null = null;
-	/** How long the pen had been still when the anchor last reset, and when.
-	 * Lifting a pencil almost always drags the tip a few px, which would reset
-	 * the anchor right at the end — this remembers the hold that preceded it. */
-	private holdBeforeReset = 0;
-	private holdResetAt = 0;
+	/** Where the pen last actually moved (client px) — QuickShape hold detector. */
+	private holdAnchor: { x: number; y: number } | null = null;
+	/** Fires while the pen is held still mid-draw → snap the live stroke. */
+	private holdTimer: number | null = null;
+	/** The unsnapped freehand points, kept so the shape can re-fit as the user
+	 * keeps drawing, and committed as the undo step under the snapped shape. */
+	private rawPts: Point[] | null = null;
+	private snappedLive = false;
 	private tapeStart: { x: number; y: number } | null = null;
 	private tapeEnd: { x: number; y: number } | null = null;
 	private tapePreviewEl: HTMLElement;
@@ -2875,6 +2909,9 @@ class MarkerOverlay extends ToolOverlay {
 	protected onGestureStart() {
 		this.current = null;
 		this.holdAnchor = null;
+		this.rawPts = null;
+		this.snappedLive = false;
+		this.clearHold();
 		this.tapeStart = this.tapeEnd = null;
 		this.tapePreviewEl.hide();
 		this.tapePreviewEl.empty();
@@ -2926,9 +2963,10 @@ class MarkerOverlay extends ToolOverlay {
 							: this.tb.markerSize,
 					highlight: mode === "highlight",
 				};
-				this.holdAnchor = { x: e.clientX, y: e.clientY, t: Date.now() };
-				this.holdBeforeReset = 0;
-				this.holdResetAt = 0;
+				this.rawPts = [[w.x, w.y, 0.5]];
+				this.snappedLive = false;
+				this.holdAnchor = { x: e.clientX, y: e.clientY };
+				this.armHold();
 			}
 			e.preventDefault();
 		});
@@ -2951,16 +2989,30 @@ class MarkerOverlay extends ToolOverlay {
 				typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [e];
 			for (const ev of events) {
 				const w = this.worldFromClient(ev.clientX, ev.clientY);
-				this.current.worldPts.push([w.x, w.y, 0.5]);
+				this.rawPts?.push([w.x, w.y, 0.5]);
+				// Once snapped, the visible stroke IS the shape — raw points keep
+				// collecting so the shape re-fits (or unsnaps) as drawing continues.
+				if (!this.snappedLive) this.current.worldPts.push([w.x, w.y, 0.5]);
 			}
-			// QuickShape: the anchor only moves when the pen really moves, so
-			// (now - anchor.t) is how long the pen has been sitting still.
+			// QuickShape: real movement (beyond pen jitter) re-arms the hold timer;
+			// holding still lets it fire and snap the live stroke.
 			const ha = this.holdAnchor;
 			if (ha && Math.hypot(e.clientX - ha.x, e.clientY - ha.y) > QUICKSHAPE_JITTER_PX) {
-				const now = Date.now();
-				this.holdBeforeReset = now - ha.t;
-				this.holdResetAt = now;
-				this.holdAnchor = { x: e.clientX, y: e.clientY, t: now };
+				this.holdAnchor = { x: e.clientX, y: e.clientY };
+				this.armHold();
+				if (this.snappedLive && this.rawPts) {
+					// Still drawing after the snap: re-fit the shape to ALL points,
+					// or fall back to freehand if it no longer reads as a shape.
+					const r = quickShapeFor(this.rawPts);
+					if (r) {
+						this.current.worldPts = r.pts;
+						this.current.shape = r.closed ? "closed" : "line";
+					} else {
+						this.current.worldPts = this.rawPts.slice();
+						this.current.shape = undefined;
+						this.snappedLive = false;
+					}
+				}
 			}
 			this.redraw();
 			e.preventDefault();
@@ -2977,9 +3029,15 @@ class MarkerOverlay extends ToolOverlay {
 			if (this.current) {
 				// One stroke (pointer down → up) becomes one ink node, immediately.
 				const stroke = this.current;
+				const raw = this.rawPts;
 				this.current = null;
-				this.maybeSnapShape(stroke);
-				if (stroke.worldPts.length > 1) this.commitStroke(stroke);
+				this.rawPts = null;
+				this.snappedLive = false;
+				this.clearHold();
+				if (stroke.worldPts.length > 1) {
+					if (stroke.shape && raw && raw.length > 1) this.commitSnapped(stroke, raw);
+					else this.commitStroke(stroke);
+				}
 				this.redraw();
 			}
 			e.preventDefault();
@@ -3003,8 +3061,15 @@ class MarkerOverlay extends ToolOverlay {
 			}
 			if (this.current) {
 				const stroke = this.current;
+				const raw = this.rawPts;
 				this.current = null;
-				if (stroke.worldPts.length > 1) this.commitStroke(stroke);
+				this.rawPts = null;
+				this.snappedLive = false;
+				this.clearHold();
+				if (stroke.worldPts.length > 1) {
+					if (stroke.shape && raw && raw.length > 1) this.commitSnapped(stroke, raw);
+					else this.commitStroke(stroke);
+				}
 				this.redraw();
 			}
 			this.tb.revertToSelect();
@@ -3053,18 +3118,21 @@ class MarkerOverlay extends ToolOverlay {
 		const ox = origin.x * scale;
 		const oy = origin.y * scale;
 
-		if (stroke.highlight) {
-			// Flat chisel: constant-width ribbon with flat ends.
-			this.ctx.globalAlpha = HIGHLIGHT_OPACITY;
+		if (stroke.highlight || stroke.shape) {
+			// Stroked polyline: the highlighter's flat ribbon, and QuickShape's
+			// crisp live preview (miter corners, closed loops — matching how the
+			// snapped shape will be committed).
+			this.ctx.globalAlpha = stroke.highlight ? HIGHLIGHT_OPACITY : 1;
 			this.ctx.strokeStyle = stroke.color;
 			this.ctx.lineWidth = stroke.size * scale;
-			this.ctx.lineCap = "butt";
-			this.ctx.lineJoin = "round";
+			this.ctx.lineCap = stroke.highlight && !stroke.shape ? "butt" : "round";
+			this.ctx.lineJoin = stroke.shape ? "miter" : "round";
 			this.ctx.beginPath();
 			stroke.worldPts.forEach(([x, y], i) => {
 				if (i === 0) this.ctx.moveTo(x * scale - ox, y * scale - oy);
 				else this.ctx.lineTo(x * scale - ox, y * scale - oy);
 			});
+			if (stroke.shape === "closed") this.ctx.closePath();
 			this.ctx.stroke();
 		} else {
 			const outline = this.outlineFor(stroke, scale);
@@ -3091,7 +3159,8 @@ class MarkerOverlay extends ToolOverlay {
 			this.tapeStart,
 			this.tapeEnd,
 			this.tb.tapePattern,
-			this.tb.plugin.settings.tapeImage
+			this.tb.plugin.settings.tapeImage,
+			this.tb.tapeSize
 		);
 		if (!ink) {
 			this.tapePreviewEl.hide();
@@ -3108,28 +3177,34 @@ class MarkerOverlay extends ToolOverlay {
 		this.tapePreviewEl.show();
 	}
 
-	/**
-	 * QuickShape: if the pen sat still at the end of the stroke (Procreate's
-	 * hold-to-snap gesture), replace the freehand points with a clean line,
-	 * ellipse, or rectangle in place. Mutates the stroke before commit.
-	 */
-	private maybeSnapShape(stroke: PencilStroke) {
-		const ha = this.holdAnchor;
-		this.holdAnchor = null;
-		if (!ha) return;
-		const now = Date.now();
-		const held = now - ha.t >= QUICKSHAPE_HOLD_MS;
-		// Pencil lift-off usually drags the tip a few px, resetting the anchor at
-		// the last instant — honor a completed hold that ended within the final
-		// ~200ms (the twitch), otherwise pen input can never satisfy the hold.
-		const heldBeforeLiftTwitch =
-			now - this.holdResetAt < 200 && this.holdBeforeReset >= QUICKSHAPE_HOLD_MS;
-		if (!held && !heldBeforeLiftTwitch) return;
-		const snapped = quickShapeFor(stroke.worldPts);
-		if (snapped) {
-			stroke.worldPts = snapped.pts;
-			stroke.shape = snapped.closed ? "closed" : "line";
+	/** (Re)start the hold countdown — fires while the pen sits still mid-draw. */
+	private armHold() {
+		this.clearHold();
+		this.holdTimer = window.setTimeout(() => this.snapLive(), QUICKSHAPE_HOLD_MS);
+	}
+
+	private clearHold() {
+		if (this.holdTimer !== null) {
+			window.clearTimeout(this.holdTimer);
+			this.holdTimer = null;
 		}
+	}
+
+	/**
+	 * QuickShape (Procreate-style): the pen has been held still mid-stroke —
+	 * snap the live stroke to a clean line/ellipse/rectangle BEFORE the pen
+	 * lifts, so the user sees the result and can keep adjusting or lift to keep.
+	 */
+	private snapLive() {
+		this.holdTimer = null;
+		const stroke = this.current;
+		if (!stroke || !this.rawPts || this.rawPts.length < 8) return;
+		const r = quickShapeFor(this.rawPts);
+		if (!r) return;
+		stroke.worldPts = r.pts;
+		stroke.shape = r.closed ? "closed" : "line";
+		this.snappedLive = true;
+		this.redraw();
 	}
 
 	private commitStroke(stroke: PencilStroke) {
@@ -3141,11 +3216,29 @@ class MarkerOverlay extends ToolOverlay {
 		}
 	}
 
+	/**
+	 * Commit a QuickShape-snapped stroke in two history steps: first the
+	 * original freehand stroke, then the clean shape that replaces it — so a
+	 * single undo restores the hand-drawn version instead of deleting the ink.
+	 */
+	private commitSnapped(stroke: PencilStroke, raw: Point[]) {
+		const canvas = this.canvas;
+		try {
+			const freehand: PencilStroke = { ...stroke, shape: undefined, worldPts: raw };
+			const fhNode = commitInkNode(this.tb, buildStrokesSvg([freehand]), [freehand]);
+			if (fhNode) canvas.removeNode?.(fhNode);
+			commitInkNode(this.tb, buildStrokesSvg([stroke]), [stroke]);
+		} catch (err) {
+			console.error("Canvas Kit: failed to save ink", err);
+			new Notice("Canvas Kit: failed to save ink — see console.");
+		}
+	}
+
 	private commitTape(a: { x: number; y: number }, b: { x: number; y: number }) {
 		try {
 			commitInkNode(
 				this.tb,
-				buildTapeSvg(a, b, this.tb.tapePattern, this.tb.plugin.settings.tapeImage)
+				buildTapeSvg(a, b, this.tb.tapePattern, this.tb.plugin.settings.tapeImage, this.tb.tapeSize)
 			);
 		} catch (err) {
 			console.error("Canvas Kit: failed to save tape", err);
@@ -3154,6 +3247,7 @@ class MarkerOverlay extends ToolOverlay {
 	}
 
 	protected onDestroy() {
+		this.clearHold();
 		this.resizeObserver.disconnect();
 	}
 }
@@ -4887,7 +4981,8 @@ function buildTapeSvg(
 	a: { x: number; y: number },
 	b: { x: number; y: number },
 	patternId: string,
-	customImage: string | null
+	customImage: string | null,
+	thickness: number = TAPE_THICKNESS
 ): InkSvg | null {
 	const len = Math.hypot(b.x - a.x, b.y - a.y);
 	if (len < 20) return null;
@@ -4895,7 +4990,7 @@ function buildTapeSvg(
 	const uy = (b.y - a.y) / len;
 	const vx = -uy;
 	const vy = ux;
-	const half = TAPE_THICKNESS / 2;
+	const half = thickness / 2;
 	const JAG = 7;
 	const TEETH = 5;
 
@@ -4909,8 +5004,8 @@ function buildTapeSvg(
 			const t = i / (TEETH * 2);
 			const jag = i % 2 === 1 ? JAG : 0;
 			pts.push({
-				x: from.x + dirX * TAPE_THICKNESS * t + jagSignX * jag,
-				y: from.y + dirY * TAPE_THICKNESS * t + jagSignY * jag,
+				x: from.x + dirX * thickness * t + jagSignX * jag,
+				y: from.y + dirY * thickness * t + jagSignY * jag,
 			});
 		}
 	};
@@ -4960,8 +5055,12 @@ function buildTapeSvg(
 	return { svg, box: { x: Math.round(minX), y: Math.round(minY), width, height } };
 }
 
-function commitInkNode(tb: CanvasToolbar, ink: InkSvg | null, sources?: PencilStroke[]) {
-	if (!ink) return;
+function commitInkNode(
+	tb: CanvasToolbar,
+	ink: InkSvg | null,
+	sources?: PencilStroke[]
+): CanvasNodeLike | undefined {
+	if (!ink) return undefined;
 	const canvas = tb.view.canvas!;
 	if (typeof canvas.createTextNode !== "function") {
 		throw new Error("canvas.createTextNode unavailable");
@@ -5003,6 +5102,7 @@ function commitInkNode(tb: CanvasToolbar, ink: InkSvg | null, sources?: PencilSt
 	window.requestAnimationFrame(() => tb.refreshNodeStyles());
 	window.setTimeout(() => tb.refreshNodeStyles(), 80);
 	window.setTimeout(() => tb.refreshNodeStyles(), 250);
+	return node;
 }
 
 // ---------- helpers ----------
