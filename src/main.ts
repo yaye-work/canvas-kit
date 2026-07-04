@@ -591,6 +591,8 @@ interface CanvasLike {
 	}) => CanvasNodeLike | undefined;
 	removeNode?: (node: CanvasNodeLike) => void;
 	requestSave?: (pushHistory?: boolean) => void;
+	/** Obsidian's debounced history push (250ms); .run() flushes it immediately. */
+	requestPushHistory?: { run?: () => void };
 	deselectAll?: () => void;
 	zoomToBbox?: (bbox: { minX: number; minY: number; maxX: number; maxY: number }) => void;
 	selection?: Set<CanvasNodeLike>;
@@ -1311,6 +1313,20 @@ class CanvasToolbar {
 	private undoTapMax = 0;
 	private undoGestureUnbind: (() => void) | null = null;
 
+	// --- pen (stylus) activity, for palm rejection ---
+	private penDownCount = 0;
+	private lastPenUpAt = 0;
+
+	/**
+	 * True while the Apple Pencil (any stylus) is on the glass, and for a short
+	 * window after it lifts. Touch contacts in that state are almost certainly
+	 * the resting palm/knuckles, not intentional fingers — so gestures and
+	 * touch-drawing are suppressed.
+	 */
+	penBlocksTouch(): boolean {
+		return this.penDownCount > 0 || Date.now() - this.lastPenUpAt < 500;
+	}
+
 	/**
 	 * Procreate-style undo gestures, bound at the CANVAS level (capture) so they
 	 * work in every mode — select, marquee, or any drawing tool — exactly like
@@ -1321,6 +1337,13 @@ class CanvasToolbar {
 	private bindUndoGestures() {
 		const wrap = this.view.canvas!.wrapperEl;
 		const down = (e: PointerEvent) => {
+			if (e.pointerType === "pen") {
+				// Pencil landed: whatever touches are down are palm — veto any
+				// tap in flight and count the pen so touch stays suppressed.
+				this.penDownCount++;
+				this.undoTapMoved = true;
+				return;
+			}
 			if (e.pointerType !== "touch") return;
 			this.undoTouches.set(e.pointerId, {
 				x: e.clientX,
@@ -1330,7 +1353,9 @@ class CanvasToolbar {
 			});
 			if (this.undoTouches.size === 2) {
 				this.undoTapStart = Date.now();
-				this.undoTapMoved = false;
+				// Touches while the pen is (or was just) down are the palm, not a
+				// deliberate two-finger tap — start this candidate pre-vetoed.
+				this.undoTapMoved = this.penBlocksTouch();
 				this.undoTapMax = 2;
 				for (const t of this.undoTouches.values()) {
 					t.sx = t.x;
@@ -1354,10 +1379,18 @@ class CanvasToolbar {
 			}
 		};
 		const up = (e: PointerEvent) => {
+			if (e.pointerType === "pen") {
+				this.penDownCount = Math.max(0, this.penDownCount - 1);
+				this.lastPenUpAt = Date.now();
+				return;
+			}
 			if (e.pointerType !== "touch") return;
 			if (!this.undoTouches.delete(e.pointerId)) return;
 			if (this.undoTouches.size < 2 && this.undoTapMax >= 2) {
-				const isTap = !this.undoTapMoved && Date.now() - this.undoTapStart < 300;
+				const isTap =
+					!this.undoTapMoved &&
+					!this.penBlocksTouch() &&
+					Date.now() - this.undoTapStart < 300;
 				const count = this.undoTapMax;
 				this.undoTapMax = 0;
 				if (isTap) {
@@ -2772,6 +2805,10 @@ abstract class ToolOverlay {
 	private bindPanGestures() {
 		const down = (e: PointerEvent) => {
 			if (e.pointerType !== "touch") return;
+			// Palm rejection: while the pencil is (or was just) on the glass, a
+			// touch contact is the resting palm. Tracking it would count as the
+			// "second finger" and cancel the in-progress pen stroke.
+			if (this.tb.penBlocksTouch()) return;
 			this.touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
 			if (this.touchPts.size === 2 && !this.gestureActive) {
 				this.gestureActive = true;
@@ -2940,6 +2977,7 @@ class MarkerOverlay extends ToolOverlay {
 	/** Second finger landed — this is a pan/zoom, not a stroke. Drop the stroke. */
 	protected onGestureStart() {
 		this.current = null;
+		this.activePointer = null;
 		this.holdAnchor = null;
 		this.rawPts = null;
 		this.snappedLive = false;
@@ -2969,15 +3007,25 @@ class MarkerOverlay extends ToolOverlay {
 		this.redraw();
 	}
 
+	/** The pointer that started the current stroke/tape/erase — moves and lifts
+	 * from any OTHER pointer (a resting palm) are ignored, so palm contacts
+	 * can't inject points, end a stroke early, or start a second one. */
+	private activePointer: number | null = null;
+
 	private bind() {
 		const el = this.canvasEl;
 		el.addEventListener("pointerdown", (e) => {
 			if (e.button !== 0) return;
+			// Palm rejection: a stroke is already in progress, or this is a touch
+			// contact while the pencil is (or was just) on the glass.
+			if (this.activePointer !== null) return;
+			if (e.pointerType === "touch" && this.tb.penBlocksTouch()) return;
 			if (this.gesturing() || (e.pointerType === "touch" && !e.isPrimary)) {
 				this.current = null;
 				return;
 			}
 			el.setPointerCapture(e.pointerId);
+			this.activePointer = e.pointerId;
 			const mode = this.tb.markerMode;
 			const w = this.worldFromClient(e.clientX, e.clientY);
 			if (mode === "erase") {
@@ -3004,6 +3052,7 @@ class MarkerOverlay extends ToolOverlay {
 		});
 		el.addEventListener("pointermove", (e) => {
 			if (this.gesturing()) return;
+			if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
 			const mode = this.tb.markerMode;
 			if (mode === "erase") {
 				if (e.buttons & 1) this.eraseAt(this.worldFromClient(e.clientX, e.clientY));
@@ -3050,6 +3099,10 @@ class MarkerOverlay extends ToolOverlay {
 			e.preventDefault();
 		});
 		const end = (e: PointerEvent) => {
+			// Only the pointer that started the stroke may end it — a palm lift
+			// mid-stroke must not commit the pen's stroke early.
+			if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
+			this.activePointer = null;
 			if (this.tapeStart && this.tapeEnd) {
 				const a = this.tapeStart;
 				const b = this.tapeEnd;
@@ -3083,6 +3136,7 @@ class MarkerOverlay extends ToolOverlay {
 		el.addEventListener("contextmenu", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
+			this.activePointer = null;
 			if (this.tapeStart && this.tapeEnd) {
 				const a = this.tapeStart;
 				const b = this.tapeEnd;
@@ -5202,6 +5256,11 @@ function commitInkNode(
 	}
 	canvas.deselectAll?.();
 	canvas.requestSave?.();
+	// Obsidian debounces history pushes by 250ms with a resetting timer, so
+	// strokes drawn in quick succession would merge into ONE undo step (and
+	// fast drawing can defer the push indefinitely). Flush the pending push so
+	// every committed stroke is its own undo step.
+	canvas.requestPushHistory?.run?.();
 	// The node's element mounts async — re-run the styling sweep a few times so
 	// frameless chrome and the highlighter's blend mode apply the moment it
 	// renders, not on the next 1.2s interval sweep.
