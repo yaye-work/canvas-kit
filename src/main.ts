@@ -1,7 +1,6 @@
 import {
 	App,
 	ItemView,
-	Menu,
 	Notice,
 	Platform,
 	Plugin,
@@ -96,13 +95,10 @@ let STROKE_MIN = 2;
 let STROKE_MAX = 28;
 /** uniform gap between consecutive presets */
 let STROKE_STEP = (STROKE_MAX - STROKE_MIN) / 4;
-let STROKE_PRESETS = [2, 9, 15, 22, 28];
 function setStrokeRange(min: number, max: number) {
 	STROKE_MIN = Math.max(1, Math.round(min));
 	STROKE_MAX = Math.max(STROKE_MIN + 4, Math.round(max));
 	STROKE_STEP = (STROKE_MAX - STROKE_MIN) / 4;
-	// Same rounding as the slider's value mapping, so tick highlighting matches.
-	STROKE_PRESETS = [0, 1, 2, 3, 4].map((i) => Math.round(STROKE_MIN + i * STROKE_STEP));
 }
 /** mark i's center as a fraction (0..1) of the track — 5 marks, evenly spaced
  * between the design's original first (0.058) and last (0.944) positions */
@@ -147,7 +143,7 @@ function tapeSwatchCss(p: TapePattern): string {
 
 /** Obsidian's accent color as h/s/l (from --interactive-accent-hsl, "254deg, 80%, 68%"-ish). */
 function accentHsl(): { h: number; s: number; l: number } {
-	const raw = getComputedStyle(document.body).getPropertyValue("--interactive-accent-hsl");
+	const raw = getComputedStyle(activeDocument.body).getPropertyValue("--interactive-accent-hsl");
 	const m = raw.match(/([\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/);
 	if (!m) return { h: 258, s: 57, l: 61 };
 	return { h: +m[1], s: +m[2], l: +m[3] };
@@ -818,15 +814,6 @@ const svgToCursor = (
 };
 
 // Designed toolbar icons (thin, filled, inherit currentColor). SVGO-optimized (p2). Frame uses Section.svg.
-const ICON_MARKER = filledMulti("M11.18 1.99c.3-.46.95-.5 1.32-.12l.07.08v.02l.06.08v.01l1.43 2.67c.35.14.63.43.74.8l2.36 7.76q.55 1.81.55 3.7v4.15c0 .69-.56 1.25-1.25 1.25H7.54c-.7 0-1.25-.56-1.25-1.25v-4.32q0-1.7.45-3.35l2.15-7.9c.13-.48.53-.82 1-.9l1.23-2.58v-.01l.05-.08zm-3.4 18.9h8.43v-1.37H7.8zm.4-7.03q-.4 1.46-.4 2.96v1.2h8.43V17q0-1.67-.48-3.27l-2.3-7.59h-3.14z");
-const ICON_HIGHLIGHTER = filledMulti("M14.49 1.62c.45-.06.85.29.85.75v2.12c.58.07 1.04.54 1.1 1.13l.34 3.85a10 10 0 0 0 1.27 4.1c.51.9.78 1.93.78 2.96v4.6c0 .7-.56 1.25-1.25 1.26H6.42c-.69 0-1.25-.56-1.25-1.25v-4.69q0-1.48.67-2.8.98-1.96 1.12-4.15l.24-3.85c.04-.64.56-1.14 1.2-1.17V3.13c0-.37.28-.69.65-.74zM6.67 20.9h10.66v-1.37H6.67zM8.46 9.6c-.1 1.65-.54 3.26-1.28 4.73a5 5 0 0 0-.5 2.13v1.57h10.65v-1.49q0-1.18-.58-2.22a12 12 0 0 1-1.46-4.7l-.33-3.63H8.7z");
-const ICON_ERASER = filledMulti("M13.48 2.1a.75.75 0 0 1 1.06-.08L22.4 8.8l.06.05c.26.28.28.71.02 1l-9.93 11.57q-.38.43-.95.43H7.57q-.46 0-.81-.3L1.59 17.1a.75.75 0 0 1-.08-1.06zm-6.32 9.66 6.74 5.79 6.97-8.11-6.74-5.8z");
-const ICON_WASHI = filledMulti("M11.54 1.93a.63.63 0 0 1 .88 0l2.82 2.83 2.83-2.83a.63.63 0 0 1 1.07.45V18.6q.04.03.04.1v.2q0 .05-.04.08v2.63c0 .35-.28.63-.63.63H5.45a.63.63 0 0 1-.63-.63V2.38a.63.63 0 0 1 1.07-.45L8.7 4.76zM6.07 21H7.3v-1.97H6.07zm1.67 0h1.78v-1.97H7.74zm2.23 0h1.78v-1.97H9.97zm2.23 0h1.78v-1.97H12.2zm2.23 0h1.78v-1.97h-1.78zm2.23 0h1.23v-1.97h-1.23zM6.07 18.58H7.3V16.8H6.07zm1.67 0h1.78V16.8H7.74zm2.23 0h1.78V16.8H9.97zm2.23 0h1.78V16.8H12.2zm2.23 0h1.78V16.8h-1.78zm2.23 0h1.23V16.8h-1.23zM6.07 16.36H7.3v-1.77H6.07zm1.67 0h1.78v-1.77H7.74zm2.23 0h1.78v-1.77H9.97zm2.23 0h1.78v-1.77H12.2zm2.23 0h1.78v-1.77h-1.78zm2.23 0h1.23v-1.77h-1.23zm-2.23-2.22h1.78v-1.78h-1.78zm2.23 0h1.23v-1.78h-1.23zm-10.59 0H7.3v-1.78H6.07zm1.67 0h1.78v-1.78H7.74zm2.23 0h1.78v-1.78H9.97zm2.23 0h1.78v-1.78H12.2zM6.07 11.9H7.3v-1.77H6.07zm1.67 0h1.78v-1.77H7.74zm2.23 0h1.78v-1.77H9.97zm2.23 0h1.78v-1.77H12.2zm2.23 0h1.78v-1.77h-1.78zm2.23 0h1.23v-1.77h-1.23zM6.07 9.7H7.3V7.92H6.07zm1.67 0h1.78V7.92H7.74zm2.23 0h1.78V7.92H9.97zm2.23 0h1.78V7.92H12.2zm2.23 0h1.78V7.92h-1.78zm2.23 0h1.23V7.92h-1.23zM6.07 7.47H7.3V5.7H6.07zm1.67 0h1.78V5.72l-.36.36a.63.63 0 0 1-.89 0L7.9 5.7h-.15zm2.23 0h1.78V5.7H9.97zm2.23 0h1.78V5.7H12.2zm3.49-1.39a.63.63 0 0 1-.89 0l-.37-.37v1.76h1.78V5.7h-.14zm.97 1.4h1.23V5.7h-1.23zM6.07 5.24H7.3V5.1L6.07 3.88zm3.92 0h1.76V3.5zm2.21 0h1.77L12.2 3.48zm4.46-.14v.14h1.23V3.88z");
-const ICON_TEXT = filledMulti("M4.98 1.96q.15.05.31.05h12.47a1 1 0 0 0 .32-.05l.55-.19.16-.02h.07c.5 0 .9.4.9.9v5.07a.89.89 0 0 1-1.77.11l-.32-2.46c-.07-.55-.25-.89-.5-1.1a1.6 1.6 0 0 0-.98-.34l-.2-.01h-2.05a1 1 0 0 0-1 1v14.63a1 1 0 0 0 1 1h1.72a.92.92 0 1 1 0 1.83H7.4a.92.92 0 0 1 0-1.83h1.72a1 1 0 0 0 1-1V4.92a1 1 0 0 0-1-1H7.07q-.84.02-1.19.35c-.24.21-.43.55-.5 1.1l-.32 2.46a.89.89 0 0 1-1.77-.11V2.65a.9.9 0 0 1 1.2-.86z");
-const ICON_CARD = filledMulti("M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.51v11.94c0 .42-.34.76-.76.76H3.51a.76.76 0 0 1-.76-.76V2.4c0-.42.34-.76.76-.76zM4.53 3.17a.26.26 0 0 0-.26.26v17.36c0 .14.12.26.26.26h14.94c.14 0 .26-.12.26-.26v-9.55a.26.26 0 0 0-.26-.27h-5.73c-.7 0-1.28-.57-1.28-1.27V3.43a.26.26 0 0 0-.26-.26z");
-const ICON_FRAME = filledMulti("M4.92 1.42c.31 0 .56.25.56.56v1.86q0 .06.07.07h12.78q.05 0 .06-.07V1.98c0-.31.25-.56.56-.56h.49c.3 0 .56.25.56.56v1.86q0 .06.06.07h2c.3 0 .56.25.56.56v.48c0 .31-.26.56-.57.56h-1.99a.06.06 0 0 0-.06.07v12.88q0 .05.06.06H22c.3 0 .56.25.56.56v.48c0 .31-.25.57-.56.57h-1.94l-.06.06v1.83c0 .31-.25.56-.56.56h-.49a.56.56 0 0 1-.56-.56V20.2l-.06-.06H5.55a.06.06 0 0 0-.07.06v1.77c0 .3-.25.56-.56.56h-.48a.56.56 0 0 1-.56-.56V20.2a.06.06 0 0 0-.07-.06H1.95a.56.56 0 0 1-.57-.57v-.48c0-.31.26-.56.57-.56H3.8q.07 0 .07-.06V5.58a.06.06 0 0 0-.07-.07H1.95a.56.56 0 0 1-.57-.56v-.48c0-.31.26-.56.57-.56H3.8q.07 0 .07-.07V1.98c0-.31.25-.56.56-.56zm.63 4.1a.06.06 0 0 0-.07.06v12.88q0 .05.07.06h12.78q.05 0 .06-.06V5.58a.06.06 0 0 0-.06-.07z");
-const ICON_TABLE = filledMulti("M19.23 1.92c.3 0 .55.24.55.54v19.08c0 .3-.25.54-.55.55H4.77a.55.55 0 0 1-.55-.55V2.46c0-.3.25-.54.55-.54zM5.77 17.16l-.05.05v3.33q0 .03.05.05h3.45q.05-.01.05-.05V17.2l-.05-.05zm5.05 0-.05.05v3.33q0 .03.05.05h7.41q.05-.01.05-.05V17.2l-.05-.05zm-5.05-4.74-.05.05v3.14q0 .05.05.05h3.45q.05 0 .05-.05v-3.14l-.05-.05zm5.05 0-.05.05v3.14q0 .05.05.05h7.41q.05 0 .05-.05v-3.14l-.05-.05zm-5.05-4.6a.05.05 0 0 0-.05.06v3q0 .03.05.04h3.45q.05 0 .05-.05v-3l-.05-.04zm5.05 0a.05.05 0 0 0-.05.06v3q0 .03.05.04h7.41q.05 0 .05-.05v-3l-.05-.04zm-5.05-4.4-.05.04v2.82q0 .05.05.05h3.45q.05 0 .05-.05V3.46l-.05-.04zm5.05 0-.05.04v2.82q0 .05.05.05h7.41q.05 0 .05-.05V3.46l-.05-.04z");
-const ICON_IMAGE = filledMulti("M8.31 5.8a3.1 3.1 0 0 1 3.1 3.1v.16A3.1 3.1 0 0 1 8.3 12h-.16a3.1 3.1 0 0 1 .16-6.2m0 1.5a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2", "M21.62 2.34c.5.05.9.48.9 1v18a1 1 0 0 1-.9.9H2.81a1 1 0 0 1-.9-1V3.34a1 1 0 0 1 .9-1zm-18.2 18.4H7.1q1.02-1.57 2.05-3.25a62 62 0 0 1 2.3-3.5 15 15 0 0 1 2.42-2.74 4.5 4.5 0 0 1 2.83-1.21c1.95 0 3.36.7 4.32 1.55V3.84H3.42zm13.28-9.2q-.81-.02-1.86.86a14 14 0 0 0-2.17 2.47 61 61 0 0 0-2.24 3.41l-1.54 2.46h12.13v-6.7c-.36-.84-1.66-2.5-4.32-2.5");
 const ICON_CARD_EMPTY = filledMulti("M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.51v11.94c0 .42-.34.76-.76.76H3.51a.76.76 0 0 1-.76-.76V2.4c0-.42.34-.76.76-.76zM4.53 3.17a.26.26 0 0 0-.26.26v17.36c0 .14.12.26.26.26h14.94c.14 0 .26-.12.26-.26v-9.55a.26.26 0 0 0-.26-.27h-5.73c-.7 0-1.28-.57-1.28-1.27V3.43a.26.26 0 0 0-.26-.26z");
 const ICON_CARD_NEW = filledMulti("M9.95 12c.28 0 .5.22.5.5v2.3c0 .27.22.5.5.5h2.29c.28 0 .5.21.5.5v.34a.5.5 0 0 1-.5.5h-2.3a.5.5 0 0 0-.5.5v2.29a.5.5 0 0 1-.5.5H9.6a.5.5 0 0 1-.5-.5v-2.3a.5.5 0 0 0-.5-.5H6.31a.5.5 0 0 1-.5-.5v-.34c0-.28.23-.5.5-.5h2.3a.5.5 0 0 0 .5-.5V12.5c0-.28.22-.5.5-.5z", "M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.51v11.94c0 .42-.34.76-.76.76H3.51a.76.76 0 0 1-.76-.76V2.4c0-.42.34-.76.76-.76zM4.53 3.17a.26.26 0 0 0-.26.26v17.36c0 .14.12.26.26.26h14.94c.14 0 .26-.12.26-.26v-9.55a.26.26 0 0 0-.26-.27h-5.73c-.7 0-1.28-.57-1.28-1.27V3.43a.26.26 0 0 0-.26-.26z");
 const ICON_CARD_EXISTING = filledMulti("M8.13 11.82a3.3 3.3 0 0 1 3.97 4.42.6.6 0 0 0 .11.64l1.4 1.35c.21.2.22.52.02.73l-.36.37a.5.5 0 0 1-.72 0l-1.38-1.32a.6.6 0 0 0-.65-.08 3.28 3.28 0 0 1-4.6-2.02 3.3 3.3 0 0 1 2.21-4.1m2.62 2.65a1.75 1.75 0 1 0-3.36 1 1.75 1.75 0 0 0 3.36-1", "M13.51 1.64q.33 0 .56.24l6.98 7.49q.2.22.2.51v11.94c0 .42-.34.76-.76.76H3.51a.76.76 0 0 1-.76-.76V2.4c0-.42.34-.76.76-.76zM4.53 3.17a.26.26 0 0 0-.26.26v17.36c0 .14.12.26.26.26h14.94c.14 0 .26-.12.26-.26v-9.55a.26.26 0 0 0-.26-.27h-5.73c-.7 0-1.28-.57-1.28-1.27V3.43a.26.26 0 0 0-.26-.26z");
@@ -844,8 +831,6 @@ const ICON_LASSO = filledMulti(
 
 const ICON2_SELECT =
 	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path d="M3.90097 5.91692C3.26242 4.33304 4.78372 2.76458 6.35703 3.28899L6.50937 3.3466L23.0328 10.2861C24.811 11.0331 24.5845 13.6216 22.7037 14.0488L16.0465 15.5585L14.4156 22.3681C13.9655 24.2463 11.3693 24.4387 10.6471 22.6474L3.90097 5.91692ZM5.92832 4.72942C5.5323 4.56309 5.13228 4.95702 5.29258 5.35539L12.0377 22.0868C12.2028 22.4963 12.7699 22.4806 12.9303 22.0995L12.9566 22.0185L14.6656 14.8876C14.7514 14.5297 15.0332 14.2513 15.3922 14.1698L22.0338 12.662L22.3717 12.5859C22.8014 12.4881 22.8768 11.9274 22.527 11.7079L22.4518 11.6689L5.92832 4.72942Z" fill="currentColor" fill-opacity="0.8"/></svg>';
-const ICON2_MARQUEE =
-	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path d="M6.98891 9.07824C10.5572 3.67692 16.3822 2.92192 19.8873 4.65579C28.6726 9.00156 17.8748 24.8226 9.64716 23.5394C1.41955 22.2562 5.93675 12.4663 14.0428 8.56225" stroke="currentColor" stroke-opacity="0.8" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2.5"/></svg>';
 const ICON2_MARKER =
 	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28.0013" fill="none" class="svg-icon"><path fill-rule="evenodd" clip-rule="evenodd" d="M13.1797 3.52318C13.4841 3.06786 14.1342 3.02562 14.499 3.4099L14.5674 3.4929L14.5732 3.49974L14.5781 3.50755L14.626 3.58372L14.6309 3.59154L14.6348 3.59935L16.0586 6.27025C16.4081 6.40564 16.6893 6.69314 16.8037 7.06908L19.1611 14.8308C19.5259 16.0318 19.7109 17.2808 19.7109 18.5359V22.6765C19.7109 23.3668 19.1511 23.9263 18.4609 23.9265H9.53906C8.84871 23.9265 8.28906 23.3669 8.28906 22.6765V18.3611C8.28912 17.2281 8.4402 16.0996 8.73828 15.0066L10.8936 7.10423C11.0232 6.62964 11.4158 6.28365 11.8877 6.20286L13.1182 3.63255L13.1221 3.62474L13.126 3.6179L13.1699 3.53978L13.1748 3.53099L13.1797 3.52318ZM9.78906 22.4265H18.2109V21.0574H9.78906V22.4265ZM10.1855 15.4011C9.92259 16.3655 9.78912 17.3615 9.78906 18.3611V19.5574H18.2109V18.5359C18.2109 17.4285 18.0474 16.3269 17.7256 15.2673L15.4219 7.68236H12.291L10.1855 15.4011Z" fill="currentColor" fill-opacity="0.8"/></svg>';
 const ICON2_HIGHLIGHTER =
@@ -1126,21 +1111,21 @@ class CanvasToolbar {
 		if (!Platform.isMobile) {
 			const fadeEls = [toggle, navGroup, field];
 			for (const el of fadeEls) {
-				el.style.opacity = "0";
-				el.style.transform = "translateX(24px)";
+				el.setCssStyles({ opacity: "0", transform: "translateX(24px)" });
 			}
 			if (btnRect) {
 				const dr = done.getBoundingClientRect(); // forces layout, pre-paint
-				done.style.transform = `translate(${
-					btnRect.left + btnRect.width / 2 - (dr.left + dr.width / 2)
-				}px, ${btnRect.top + btnRect.height / 2 - (dr.top + dr.height / 2)}px)`;
+				done.setCssStyles({
+					transform: `translate(${
+						btnRect.left + btnRect.width / 2 - (dr.left + dr.width / 2)
+					}px, ${btnRect.top + btnRect.height / 2 - (dr.top + dr.height / 2)}px)`,
+				});
 			}
 			window.requestAnimationFrame(() => {
 				window.requestAnimationFrame(() => {
-					done.style.transform = "";
+					done.setCssStyles({ transform: "" });
 					for (const el of fadeEls) {
-						el.style.opacity = "1";
-						el.style.transform = "";
+						el.setCssStyles({ opacity: "1", transform: "" });
 					}
 				});
 			});
@@ -1493,14 +1478,16 @@ class CanvasToolbar {
 	 */
 	applyScale() {
 		const s = this.plugin.settings.toolbarScale || 1;
-		this.barEl.style.setProperty("zoom", String(s));
-		this.barEl.style.transform = "translateX(-50%)";
+		this.barEl.setCssProps({ zoom: String(s) });
+		this.barEl.setCssStyles({ transform: "translateX(-50%)" });
 		if (this.subBarEl) {
-			this.subBarEl.style.setProperty("zoom", String(s));
-			this.subBarEl.style.transform = "translateX(-50%)";
+			this.subBarEl.setCssProps({ zoom: String(s) });
 			// Sit 4px below the zoomed main bar (top 16 + height 44 = bottom 60).
 			// zoom multiplies the element's own top too, so divide the gap by s.
-			this.subBarEl.style.top = `${60 + 4 / s}px`;
+			this.subBarEl.setCssStyles({
+				transform: "translateX(-50%)",
+				top: `${60 + 4 / s}px`,
+			});
 			this.positionSubBar();
 		}
 	}
@@ -1519,13 +1506,13 @@ class CanvasToolbar {
 		const sub = this.subBarEl;
 		if (!sub) return;
 		if (this.tool !== "marquee" && this.tool !== "card") {
-			sub.style.left = "50%";
+			sub.setCssStyles({ left: "50%" });
 			return;
 		}
 		const btn = this.buttons.get(this.tool);
 		const wrap = this.view.canvas!.wrapperEl;
 		if (!btn) {
-			sub.style.left = "50%";
+			sub.setCssStyles({ left: "50%" });
 			return;
 		}
 		const s = this.plugin.settings.toolbarScale || 1;
@@ -5436,7 +5423,6 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 			.addSlider((s) =>
 				s
 					.setLimits(0, 100, 5)
-					.setDynamicTooltip()
 					.setValue(Math.round((this.plugin.settings.inkSmoothing ?? 0.5) * 100))
 					.onChange(async (v) => {
 						this.plugin.settings.inkSmoothing = v / 100;
@@ -5485,7 +5471,7 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 			.setName("Reset to defaults")
 			.setDesc("Restore every Canvas Kit setting above to its default (including the custom tape image).")
 			.addButton((b) =>
-				b.setButtonText("Reset").setWarning().onClick(async () => {
+				b.setButtonText("Reset").setDestructive().onClick(async () => {
 					this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
 					await this.plugin.saveSettings();
 					this.plugin.applyBottomBarVisibility();
