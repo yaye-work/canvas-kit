@@ -25,6 +25,8 @@ interface CanvasPencilSettings {
 	showTableTool: boolean; // show the table button in the toolbar
 	brushMin: number; // smallest brush size (first slider mark)
 	brushMax: number; // biggest brush size (last slider mark)
+	tapeImageW: number; // natural px width of the stored tape image (0 = legacy square)
+	tapeImageH: number; // natural px height of the stored tape image
 }
 
 const DEFAULT_SETTINGS: CanvasPencilSettings = {
@@ -38,6 +40,8 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	showTableTool: true,
 	brushMin: 2,
 	brushMax: 28,
+	tapeImageW: 0,
+	tapeImageH: 0,
 };
 
 // Stabilization strength (Procreate's "motion filtering"), module-level
@@ -159,34 +163,6 @@ const TAPE_PATTERNS: TapePattern[] = [
 		base: tapeAccentBase,
 		defs: (pid, angle) =>
 			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><path d="M16 0H0V16" fill="none" stroke="${tapeAccentLine()}" stroke-width="1.5"/></pattern>`,
-	},
-	{
-		id: "dots",
-		label: "Dots",
-		base: "#fdf3e7",
-		defs: (pid, angle) =>
-			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><circle cx="8" cy="8" r="3" fill="#e0626a"/></pattern>`,
-	},
-	{
-		id: "checker",
-		label: "Checker",
-		base: "#ffffff",
-		defs: (pid, angle) =>
-			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><rect width="8" height="8" fill="#4f9ddb"/><rect x="8" y="8" width="8" height="8" fill="#4f9ddb"/></pattern>`,
-	},
-	{
-		id: "stars",
-		label: "Stars",
-		base: "#2b2d52",
-		defs: (pid, angle) =>
-			`<pattern id="${pid}" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle})"><circle cx="6" cy="6" r="2" fill="#fff"/><circle cx="18" cy="14" r="1.4" fill="#fff"/><circle cx="10" cy="20" r="1" fill="#fff"/></pattern>`,
-	},
-	{
-		id: "stripes",
-		label: "Stripes",
-		base: "#f5d442",
-		defs: (pid, angle) =>
-			`<pattern id="${pid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(${angle + 45})"><rect width="8" height="16" fill="#58b583"/></pattern>`,
 	},
 ];
 
@@ -2221,16 +2197,20 @@ class CanvasToolbar {
 			const img = new Image();
 			img.onload = () => {
 				URL.revokeObjectURL(url);
-				// Downscale to a small square tile so the canvas file stays light.
-				const TILE = 96;
+				// Downscale (height → 96px, width proportional, capped) so the
+				// canvas file stays light. Wide designs keep their aspect ratio —
+				// buildTapeSvg renders them 3-slice: fixed start cap, tiling
+				// middle, fixed end cap.
+				const H = 96;
 				const c = activeDocument.createElement("canvas");
-				c.width = c.height = TILE;
+				const s = H / img.height;
+				c.width = Math.max(1, Math.min(H * 12, Math.round(img.width * s)));
+				c.height = H;
 				const ctx = c.getContext("2d")!;
-				const s = Math.max(TILE / img.width, TILE / img.height);
-				const dw = img.width * s;
-				const dh = img.height * s;
-				ctx.drawImage(img, (TILE - dw) / 2, (TILE - dh) / 2, dw, dh);
+				ctx.drawImage(img, 0, 0, c.width, c.height);
 				this.plugin.settings.tapeImage = c.toDataURL("image/jpeg", 0.8);
+				this.plugin.settings.tapeImageW = c.width;
+				this.plugin.settings.tapeImageH = c.height;
 				void this.plugin.saveSettings();
 				this.tapePattern = CUSTOM_TAPE_ID;
 				this.renderStyleSection();
@@ -3155,12 +3135,15 @@ class MarkerOverlay extends ToolOverlay {
 	/** Live tape preview: the real pattern SVG, stretched as you drag. */
 	private updateTapePreview() {
 		if (!this.tapeStart || !this.tapeEnd) return;
+		const s = this.tb.plugin.settings;
 		const ink = buildTapeSvg(
 			this.tapeStart,
 			this.tapeEnd,
 			this.tb.tapePattern,
-			this.tb.plugin.settings.tapeImage,
-			this.tb.tapeSize
+			s.tapeImage,
+			this.tb.tapeSize,
+			s.tapeImageW,
+			s.tapeImageH
 		);
 		if (!ink) {
 			this.tapePreviewEl.hide();
@@ -3238,7 +3221,15 @@ class MarkerOverlay extends ToolOverlay {
 		try {
 			commitInkNode(
 				this.tb,
-				buildTapeSvg(a, b, this.tb.tapePattern, this.tb.plugin.settings.tapeImage, this.tb.tapeSize)
+				buildTapeSvg(
+					a,
+					b,
+					this.tb.tapePattern,
+					this.tb.plugin.settings.tapeImage,
+					this.tb.tapeSize,
+					this.tb.plugin.settings.tapeImageW,
+					this.tb.plugin.settings.tapeImageH
+				)
 			);
 		} catch (err) {
 			console.error("Canvas Kit: failed to save tape", err);
@@ -4982,7 +4973,9 @@ function buildTapeSvg(
 	b: { x: number; y: number },
 	patternId: string,
 	customImage: string | null,
-	thickness: number = TAPE_THICKNESS
+	thickness: number = TAPE_THICKNESS,
+	imgW = 0,
+	imgH = 0
 ): InkSvg | null {
 	const len = Math.hypot(b.x - a.x, b.y - a.y);
 	if (len < 20) return null;
@@ -5020,7 +5013,7 @@ function buildTapeSvg(
 		if (p.x > maxX) maxX = p.x;
 		if (p.y > maxY) maxY = p.y;
 	}
-	const PAD = 4;
+	const PAD = 10; // room for the drop shadow
 	minX -= PAD; minY -= PAD; maxX += PAD; maxY += PAD;
 	const width = Math.max(1, Math.round(maxX - minX));
 	const height = Math.max(1, Math.round(maxY - minY));
@@ -5031,6 +5024,42 @@ function buildTapeSvg(
 		"Z";
 	const angle = r2((Math.atan2(uy, ux) * 180) / Math.PI);
 	const pid = `cpg${randomId().slice(0, 6)}`;
+	const shadow =
+		`<filter id="${pid}sh" x="-30%" y="-30%" width="160%" height="160%">` +
+		`<feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.16"/>` +
+		`</filter>`;
+
+	// Custom image with a wide aspect → 3-slice: the left and right square
+	// slices of the image are FIXED end caps, the middle slice tiles along the
+	// tape — so the ends always look the same, however long the strip.
+	if (
+		patternId === CUSTOM_TAPE_ID &&
+		customImage &&
+		imgW > 0 &&
+		imgH > 0 &&
+		imgW / imgH >= 2
+	) {
+		const capImgW = imgH; // square caps from each end of the image
+		const midImgW = imgW - 2 * capImgW;
+		const capL = thickness; // caps render as thickness×thickness squares
+		const tileL = Math.max(8, thickness * (midImgW / imgH));
+		const half2 = thickness / 2;
+		const img = `<image href="${customImage}" width="${imgW}" height="${imgH}"/>`;
+		const svg =
+			`<svg class="${INK_MARK}" xmlns="http://www.w3.org/2000/svg" viewBox="${r2(minX)} ${r2(minY)} ${width} ${height}" width="${width}" height="${height}">` +
+			`<defs>${shadow}<clipPath id="${pid}c"><path d="${d}"/></clipPath>` +
+			`<pattern id="${pid}" x="${r2(capL)}" width="${r2(tileL)}" height="${thickness}" patternUnits="userSpaceOnUse">` +
+			`<svg width="${r2(tileL)}" height="${thickness}" viewBox="${capImgW} 0 ${midImgW} ${imgH}" preserveAspectRatio="none">${img}</svg>` +
+			`</pattern></defs>` +
+			`<g filter="url(#${pid}sh)"><g clip-path="url(#${pid}c)">` +
+			`<g transform="translate(${r2(a.x)} ${r2(a.y)}) rotate(${angle})">` +
+			`<rect x="0" y="${r2(-half2)}" width="${r2(len)}" height="${thickness}" fill="#ffffff"/>` +
+			`<rect x="${r2(capL)}" y="${r2(-half2)}" width="${r2(Math.max(0, len - 2 * capL))}" height="${thickness}" fill="url(#${pid})"/>` +
+			`<svg x="0" y="${r2(-half2)}" width="${r2(capL)}" height="${thickness}" viewBox="0 0 ${capImgW} ${imgH}" preserveAspectRatio="none">${img}</svg>` +
+			`<svg x="${r2(len - capL)}" y="${r2(-half2)}" width="${r2(capL)}" height="${thickness}" viewBox="${imgW - capImgW} 0 ${capImgW} ${imgH}" preserveAspectRatio="none">${img}</svg>` +
+			`</g></g></g></svg>`;
+		return { svg, box: { x: Math.round(minX), y: Math.round(minY), width, height } };
+	}
 
 	let base: string;
 	let defs: string;
@@ -5048,9 +5077,11 @@ function buildTapeSvg(
 
 	const svg =
 		`<svg class="${INK_MARK}" xmlns="http://www.w3.org/2000/svg" viewBox="${r2(minX)} ${r2(minY)} ${width} ${height}" width="${width}" height="${height}">` +
-		`<defs>${defs}</defs>` +
+		`<defs>${shadow}${defs}</defs>` +
+		`<g filter="url(#${pid}sh)">` +
 		`<path d="${d}" fill="${base}"/>` +
 		`<path d="${d}" fill="url(#${pid})"/>` +
+		`</g>` +
 		`</svg>`;
 	return { svg, box: { x: Math.round(minX), y: Math.round(minY), width, height } };
 }
@@ -5247,6 +5278,8 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 			.addButton((b) =>
 				b.setButtonText("Remove image").onClick(async () => {
 					this.plugin.settings.tapeImage = null;
+					this.plugin.settings.tapeImageW = 0;
+					this.plugin.settings.tapeImageH = 0;
 					await this.plugin.saveSettings();
 					new Notice("Custom tape image removed.");
 				})
