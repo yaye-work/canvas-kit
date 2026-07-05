@@ -2286,10 +2286,19 @@ class CanvasToolbar {
 			});
 			const picker = wheel.createEl("input", { type: "color" });
 			picker.value = /^#[0-9a-f]{6}$/i.test(current) ? current : "#1e1e1e";
-			// Let the color input open natively (its own tap → native picker). An
-			// earlier "open on pointerdown + preventDefault + .click()" broke it on
-			// iPad, where the WebView ignores synthetic clicks AND preventDefault
-			// suppresses the native open — so nothing happened at all.
+			// iPadOS won't open the native picker for a tapped opacity:0 input
+			// (and ignores synthetic .click()). The input is pointer-transparent
+			// (see CSS); the wheel receives the tap and calls showPicker(), the
+			// API meant for exactly this, with .click() as a desktop fallback.
+			wheel.addEventListener("click", () => {
+				const p = picker as HTMLInputElement & { showPicker?: () => void };
+				try {
+					if (typeof p.showPicker === "function") p.showPicker();
+					else picker.click();
+				} catch {
+					picker.click();
+				}
+			});
 			picker.addEventListener("input", () => {
 				setColor(picker.value);
 				this.markStyleActive(el, wheel);
