@@ -559,7 +559,6 @@ interface CanvasNodeLike {
 	getData?: () => Record<string, unknown>;
 	setData?: (data: Record<string, unknown>) => void;
 	moveAndResize?: (r: { x: number; y: number; width: number; height: number }) => void;
-	editLabel?: () => void; // groups/sections: open the label for renaming
 	unknownData?: Record<string, unknown>;
 }
 
@@ -1316,37 +1315,25 @@ class CanvasToolbar {
 	}
 
 	// --- universal touch gestures: two-finger tap = undo, three-finger = redo ---
-	// Finger counting is driven by TouchEvents (e.touches is the AUTHORITATIVE
-	// live list — a pointerup can be missed, but e.touches is never wrong), so
-	// stale contacts can't accumulate and make one finger read as two.
 
+	private undoTouches = new Map<number, { x: number; y: number; sx: number; sy: number }>();
+	private undoTapStart = 0;
+	private undoTapMoved = false;
+	private undoTapMax = 0;
 	private undoGestureUnbind: (() => void) | null = null;
-	private tapStartAt = 0;
-	private tapMaxFingers = 0;
-	private tapMoved = false;
-	private tapPts = new Map<number, { x: number; y: number }>();
 
 	// --- pen (stylus) activity, for palm rejection ---
 	private penDownCount = 0;
 	private lastPenUpAt = 0;
-	private stylusOnScreen = false;
-	private lastStylusUp = 0;
 
 	/**
 	 * True while the Apple Pencil (any stylus) is on the glass, and for a short
 	 * window after it lifts. Touch contacts in that state are almost certainly
 	 * the resting palm/knuckles, not intentional fingers — so gestures and
-	 * touch-drawing are suppressed. Sourced from BOTH pen pointer events and
-	 * touch `touchType`, whichever the platform provides.
+	 * touch-drawing are suppressed.
 	 */
 	penBlocksTouch(): boolean {
-		const now = Date.now();
-		return (
-			this.penDownCount > 0 ||
-			this.stylusOnScreen ||
-			now - this.lastPenUpAt < 400 ||
-			now - this.lastStylusUp < 400
-		);
+		return this.penDownCount > 0 || Date.now() - this.lastPenUpAt < 500;
 	}
 
 	private penCompatUnbind: (() => void) | null = null;
@@ -1416,98 +1403,82 @@ class CanvasToolbar {
 	 */
 	private bindUndoGestures() {
 		const wrap = this.view.canvas!.wrapperEl;
-		const doc = this.doc;
-
-		// Pen presence via pointer events (reliable pointerType). penDownCount can
-		// only drift if an "up" is missed; the touch all-clear below corrects it.
-		const penDown = (e: PointerEvent) => {
-			if (e.pointerType === "pen") this.penDownCount++;
+		const down = (e: PointerEvent) => {
+			if (e.pointerType === "pen") {
+				// Pencil landed: whatever touches are down are palm — veto any
+				// tap in flight and count the pen so touch stays suppressed.
+				this.penDownCount++;
+				this.undoTapMoved = true;
+				return;
+			}
+			if (e.pointerType !== "touch") return;
+			this.undoTouches.set(e.pointerId, {
+				x: e.clientX,
+				y: e.clientY,
+				sx: e.clientX,
+				sy: e.clientY,
+			});
+			if (this.undoTouches.size === 2) {
+				this.undoTapStart = Date.now();
+				// Touches while the pen is (or was just) down are the palm, not a
+				// deliberate two-finger tap — start this candidate pre-vetoed.
+				this.undoTapMoved = this.penBlocksTouch();
+				this.undoTapMax = 2;
+				for (const t of this.undoTouches.values()) {
+					t.sx = t.x;
+					t.sy = t.y;
+				}
+			} else if (this.undoTouches.size > 2) {
+				this.undoTapMax = Math.max(this.undoTapMax, this.undoTouches.size);
+			}
 		};
-		const penUp = (e: PointerEvent) => {
+		const move = (e: PointerEvent) => {
+			if (e.pointerType !== "touch") return;
+			const t = this.undoTouches.get(e.pointerId);
+			if (!t) return;
+			t.x = e.clientX;
+			t.y = e.clientY;
+			if (
+				this.undoTouches.size >= 2 &&
+				Math.hypot(t.x - t.sx, t.y - t.sy) > 12
+			) {
+				this.undoTapMoved = true;
+			}
+		};
+		const up = (e: PointerEvent) => {
 			if (e.pointerType === "pen") {
 				this.penDownCount = Math.max(0, this.penDownCount - 1);
 				this.lastPenUpAt = Date.now();
+				return;
 			}
-		};
-
-		// Multi-finger tap via TouchEvents. touchType "stylus" = pencil, so the
-		// pencil (and its resting palm) can never masquerade as a finger tap.
-		const stylusType = (t: Touch) => (t as Touch & { touchType?: string }).touchType === "stylus";
-		const fingers = (e: TouchEvent) => Array.from(e.touches).filter((t) => !stylusType(t));
-		const stylusNow = (e: TouchEvent) => Array.from(e.touches).some(stylusType);
-
-		const tStart = (e: TouchEvent) => {
-			this.stylusOnScreen = stylusNow(e);
-			const fs = fingers(e);
-			if (this.tapStartAt === 0 && fs.length > 0) {
-				this.tapStartAt = Date.now();
-				this.tapMaxFingers = 0;
-				this.tapMoved = false;
-				this.tapPts.clear();
-			}
-			this.tapMaxFingers = Math.max(this.tapMaxFingers, fs.length);
-			// Any pencil contact during the session → it's drawing + palm, not a tap.
-			if (this.stylusOnScreen || this.penDownCount > 0) this.tapMoved = true;
-			for (const t of fs) {
-				if (!this.tapPts.has(t.identifier)) {
-					this.tapPts.set(t.identifier, { x: t.clientX, y: t.clientY });
+			if (e.pointerType !== "touch") return;
+			if (!this.undoTouches.delete(e.pointerId)) return;
+			if (this.undoTouches.size < 2 && this.undoTapMax >= 2) {
+				const isTap =
+					!this.undoTapMoved &&
+					!this.penBlocksTouch() &&
+					Date.now() - this.undoTapStart < 300;
+				const count = this.undoTapMax;
+				this.undoTapMax = 0;
+				if (isTap) {
+					try {
+						if (count >= 3) this.view.canvas?.redo?.();
+						else this.view.canvas?.undo?.();
+					} catch (err) {
+						console.warn("Canvas Kit: gesture undo failed", err);
+					}
 				}
 			}
 		};
-		const tMove = (e: TouchEvent) => {
-			this.stylusOnScreen = stylusNow(e);
-			if (this.stylusOnScreen) this.tapMoved = true;
-			for (const t of fingers(e)) {
-				const s = this.tapPts.get(t.identifier);
-				if (s && Math.hypot(t.clientX - s.x, t.clientY - s.y) > 12) this.tapMoved = true;
-			}
-		};
-		const tEnd = (e: TouchEvent) => {
-			const wasStylus = this.stylusOnScreen;
-			this.stylusOnScreen = stylusNow(e);
-			if (wasStylus && !this.stylusOnScreen) this.lastStylusUp = Date.now();
-			if (e.touches.length > 0) return;
-			// All contacts lifted — the authoritative reset point. Correct any
-			// leaked pen count and evaluate the just-finished gesture.
-			if (this.penDownCount !== 0) {
-				this.penDownCount = 0;
-				this.lastPenUpAt = Date.now();
-			}
-			const dur = Date.now() - this.tapStartAt;
-			const count = this.tapMaxFingers;
-			const moved = this.tapMoved;
-			const started = this.tapStartAt;
-			this.tapStartAt = 0;
-			this.tapMaxFingers = 0;
-			this.tapMoved = false;
-			this.tapPts.clear();
-			if (started && !moved && dur < 350 && count >= 2) {
-				try {
-					if (count >= 3) this.view.canvas?.redo?.();
-					else this.view.canvas?.undo?.();
-				} catch (err) {
-					console.warn("Canvas Kit: gesture undo failed", err);
-				}
-			}
-		};
-
-		wrap.addEventListener("pointerdown", penDown, true);
-		wrap.addEventListener("pointerup", penUp, true);
-		wrap.addEventListener("pointercancel", penUp, true);
-		// Touch listeners on the document (capture) so a stray touch that lands
-		// off the canvas wrapper still ends the session and clears state.
-		doc.addEventListener("touchstart", tStart, true);
-		doc.addEventListener("touchmove", tMove, true);
-		doc.addEventListener("touchend", tEnd, true);
-		doc.addEventListener("touchcancel", tEnd, true);
+		wrap.addEventListener("pointerdown", down, true);
+		wrap.addEventListener("pointermove", move, true);
+		wrap.addEventListener("pointerup", up, true);
+		wrap.addEventListener("pointercancel", up, true);
 		this.undoGestureUnbind = () => {
-			wrap.removeEventListener("pointerdown", penDown, true);
-			wrap.removeEventListener("pointerup", penUp, true);
-			wrap.removeEventListener("pointercancel", penUp, true);
-			doc.removeEventListener("touchstart", tStart, true);
-			doc.removeEventListener("touchmove", tMove, true);
-			doc.removeEventListener("touchend", tEnd, true);
-			doc.removeEventListener("touchcancel", tEnd, true);
+			wrap.removeEventListener("pointerdown", down, true);
+			wrap.removeEventListener("pointermove", move, true);
+			wrap.removeEventListener("pointerup", up, true);
+			wrap.removeEventListener("pointercancel", up, true);
 		};
 	}
 
@@ -3062,10 +3033,6 @@ class MarkerOverlay extends ToolOverlay {
 	private grabNode: CanvasNodeLike | null = null;
 	private grabDX = 0;
 	private grabDY = 0;
-	private grabSX = 0;
-	private grabSY = 0;
-	private grabMoved = false;
-	private grabIsGroup = false;
 
 	/** The object to grab at a world point, or null to draw there. Ink is never
 	 * grabbable (so you can draw over strokes); a section is grabbable only near
@@ -3147,15 +3114,8 @@ class MarkerOverlay extends ToolOverlay {
 	 * from any OTHER pointer (a resting palm) are ignored, so palm contacts
 	 * can't inject points, end a stroke early, or start a second one. */
 	private activePointer: number | null = null;
-
-	/** Clear the canvas selection if anything is selected (tap-on-empty). */
-	private deselectIfAny() {
-		const c = this.canvas;
-		if (c.selection && c.selection.size > 0) c.deselectAll?.();
-	}
-	/** Pencil-only mode: a finger drag on empty canvas pans instead of drawing.
-	 * sx/sy are the start point, to tell a tap (deselect) from a pan. */
-	private fingerPan: { x: number; y: number; sx: number; sy: number } | null = null;
+	/** Pencil-only mode: a finger drag on empty canvas pans instead of drawing. */
+	private fingerPan: { x: number; y: number } | null = null;
 
 	private bind() {
 		const el = this.canvasEl;
@@ -3178,10 +3138,6 @@ class MarkerOverlay extends ToolOverlay {
 				this.grabNode = grab;
 				this.grabDX = w.x - (grab.x ?? 0);
 				this.grabDY = w.y - (grab.y ?? 0);
-				this.grabSX = e.clientX;
-				this.grabSY = e.clientY;
-				this.grabMoved = false;
-				this.grabIsGroup = grab.getData?.().type === "group";
 				this.tb.view.canvas?.selectOnly?.(grab);
 				e.preventDefault();
 				return;
@@ -3189,7 +3145,7 @@ class MarkerOverlay extends ToolOverlay {
 			// Apple-Pencil-only: a finger never draws — it pans the canvas instead
 			// (drawing/erasing/taping is reserved for the pen; mouse still draws).
 			if (e.pointerType === "touch" && this.tb.plugin.settings.pencilOnlyDraw) {
-				this.fingerPan = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY };
+				this.fingerPan = { x: e.clientX, y: e.clientY };
 				e.preventDefault();
 				return;
 			}
@@ -3222,12 +3178,6 @@ class MarkerOverlay extends ToolOverlay {
 			// Dragging a grabbed object → move it live (markMoved repositions the
 			// element; save happens once on drop for a single undo step).
 			if (this.grabNode) {
-				// Start moving only past a small threshold, so a tap (select /
-				// rename a section) isn't eaten by finger jitter.
-				if (!this.grabMoved && Math.hypot(e.clientX - this.grabSX, e.clientY - this.grabSY) <= 6) {
-					return;
-				}
-				this.grabMoved = true;
 				const w = this.worldFromClient(e.clientX, e.clientY);
 				this.grabNode.moveAndResize?.({
 					x: w.x - this.grabDX,
@@ -3242,8 +3192,7 @@ class MarkerOverlay extends ToolOverlay {
 			if (this.fingerPan) {
 				const dx = e.clientX - this.fingerPan.x;
 				const dy = e.clientY - this.fingerPan.y;
-				this.fingerPan.x = e.clientX;
-				this.fingerPan.y = e.clientY;
+				this.fingerPan = { x: e.clientX, y: e.clientY };
 				this.applyPanZoom(dx, dy, 1, e.clientX, e.clientY);
 				e.preventDefault();
 				return;
@@ -3298,31 +3247,15 @@ class MarkerOverlay extends ToolOverlay {
 			// mid-stroke must not commit the pen's stroke early.
 			if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
 			this.activePointer = null;
-			// Finger on empty canvas: a drag panned; a tap deselects (without ink).
 			if (this.fingerPan) {
-				const fp = this.fingerPan;
 				this.fingerPan = null;
-				if (Math.hypot(e.clientX - fp.sx, e.clientY - fp.sy) <= 6) this.deselectIfAny();
 				return;
 			}
-			// Released a grabbed object.
+			// Released a grabbed object → persist its new position as one undo step.
 			if (this.grabNode) {
-				const node = this.grabNode;
-				const moved = this.grabMoved;
-				const isGroup = this.grabIsGroup;
 				this.grabNode = null;
-				if (moved) {
-					// A drag → persist the new position as one undo step.
-					this.canvas.requestSave?.();
-					this.canvas.requestPushHistory?.run?.();
-				} else if (isGroup) {
-					// A tap on a section's label → open it for renaming.
-					try {
-						node.editLabel?.();
-					} catch (err) {
-						console.warn("Canvas Kit: couldn't edit section label", err);
-					}
-				}
+				this.canvas.requestSave?.();
+				this.canvas.requestPushHistory?.run?.();
 				e.preventDefault();
 				return;
 			}
@@ -3345,9 +3278,6 @@ class MarkerOverlay extends ToolOverlay {
 				if (stroke.worldPts.length > 1) {
 					if (stroke.shape && raw && raw.length > 1) this.commitSnapped(stroke, raw);
 					else this.commitStroke(stroke);
-				} else {
-					// A pen tap on empty canvas adds no ink → use it to deselect.
-					this.deselectIfAny();
 				}
 				this.redraw();
 			}
