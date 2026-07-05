@@ -180,26 +180,37 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 
 .canvas-pencil-wheel {
 	position: relative;
-	width: 12px;
-	height: 12px;
+	width: 14px;
+	height: 14px;
 	border-radius: 50%;
 	cursor: pointer;
+	/* Rainbow ring peeks around the native swatch as the "custom color" hint. */
 	background: conic-gradient(
 		#e03e3e, #f08c28, #f5c731, #5bb98c, #4f9ddb, #7d5bd6, #e03e3e
 	);
 }
 
+/* Visible native swatch (opens reliably on iPad); sits centered in the ring. */
 .canvas-pencil-wheel input[type="color"] {
 	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	opacity: 0;
+	inset: 2px;
+	width: auto;
+	height: auto;
 	padding: 0;
+	border: 1.5px solid var(--background-primary);
+	border-radius: 50%;
+	cursor: pointer;
+	background: none;
+	touch-action: manipulation;
+	-webkit-appearance: none;
+	appearance: none;
+}
+.canvas-pencil-wheel input[type="color"]::-webkit-color-swatch-wrapper {
+	padding: 0;
+}
+.canvas-pencil-wheel input[type="color"]::-webkit-color-swatch {
 	border: none;
-	/* The wheel div handles the tap and calls showPicker(); the input is just a
-	   value holder + picker anchor, so it must not intercept the tap itself. */
-	pointer-events: none;
+	border-radius: 50%;
 }
 
 /* custom tape image slot ("+" or the user's image) */

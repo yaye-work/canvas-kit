@@ -2286,19 +2286,9 @@ class CanvasToolbar {
 			});
 			const picker = wheel.createEl("input", { type: "color" });
 			picker.value = /^#[0-9a-f]{6}$/i.test(current) ? current : "#1e1e1e";
-			// iPadOS won't open the native picker for a tapped opacity:0 input
-			// (and ignores synthetic .click()). The input is pointer-transparent
-			// (see CSS); the wheel receives the tap and calls showPicker(), the
-			// API meant for exactly this, with .click() as a desktop fallback.
-			wheel.addEventListener("click", () => {
-				const p = picker as HTMLInputElement & { showPicker?: () => void };
-				try {
-					if (typeof p.showPicker === "function") p.showPicker();
-					else picker.click();
-				} catch {
-					picker.click();
-				}
-			});
+			// A plain, VISIBLE native color input opens reliably on iPad; the
+			// input itself is the swatch. (Hidden/opacity:0 inputs won't open on
+			// iPad, and JS shims to force them froze the app — so keep it simple.)
 			picker.addEventListener("input", () => {
 				setColor(picker.value);
 				this.markStyleActive(el, wheel);
