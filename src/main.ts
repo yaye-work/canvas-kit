@@ -2303,9 +2303,9 @@ class CanvasToolbar {
 			});
 			const picker = wheel.createEl("input", { type: "color" });
 			picker.value = /^#[0-9a-f]{6}$/i.test(current) ? current : "#1e1e1e";
-			// A plain, VISIBLE native color input opens reliably on iPad; the
-			// input itself is the swatch. (Hidden/opacity:0 inputs won't open on
-			// iPad, and JS shims to force them froze the app — so keep it simple.)
+			// Rainbow face on TOP of the (visible, iPad-openable) input; it's
+			// pointer-events:none in CSS, so the tap passes through to the input.
+			wheel.createDiv({ cls: "canvas-pencil-wheel-face" });
 			picker.addEventListener("input", () => {
 				setColor(picker.value);
 				this.markStyleActive(el, wheel);
