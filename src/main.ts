@@ -2303,9 +2303,13 @@ class CanvasToolbar {
 			});
 			const picker = wheel.createEl("input", { type: "color" });
 			picker.value = /^#[0-9a-f]{6}$/i.test(current) ? current : "#1e1e1e";
-			// Rainbow face on TOP of the (visible, iPad-openable) input; it's
-			// pointer-events:none in CSS, so the tap passes through to the input.
-			wheel.createDiv({ cls: "canvas-pencil-wheel-face" });
+			// Open the native picker on pointerdown — waiting for the synthesized
+			// click costs ~300ms of tap delay on touch devices. (This is the
+			// shipped-and-working 0.2.1 behavior; later "fixes" only broke it.)
+			picker.addEventListener("pointerdown", (e) => {
+				e.preventDefault();
+				picker.click();
+			});
 			picker.addEventListener("input", () => {
 				setColor(picker.value);
 				this.markStyleActive(el, wheel);

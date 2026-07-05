@@ -176,9 +176,7 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	outline-offset: 2px;
 }
 
-/* color wheel (custom color) — a native color input (kept VISIBLE so iPad
-   actually opens it on tap) covered by a pointer-transparent rainbow face, so
-   the button shows the wheel design instead of the input's own swatch. */
+/* color wheel (custom color) */
 
 .canvas-pencil-wheel {
 	position: relative;
@@ -186,6 +184,9 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	height: 12px;
 	border-radius: 50%;
 	cursor: pointer;
+	background: conic-gradient(
+		#e03e3e, #f08c28, #f5c731, #5bb98c, #4f9ddb, #7d5bd6, #e03e3e
+	);
 }
 
 .canvas-pencil-wheel input[type="color"] {
@@ -193,40 +194,11 @@ body.canvas-kit-hide-bottom-bar .canvas-card-menu {
 	inset: 0;
 	width: 100%;
 	height: 100%;
-	padding: 0;
-	margin: 0;
-	border: none;
-	border-radius: 50%;
+	opacity: 0;
 	cursor: pointer;
-	/* Must stay "visible" (opacity 1, not hidden) or iPadOS won't present the
-	   picker — the face on top hides its look. */
-	opacity: 1;
-	touch-action: manipulation;
-	-webkit-appearance: none;
-	appearance: none;
-}
-.canvas-pencil-wheel input[type="color"]::-webkit-color-swatch-wrapper {
 	padding: 0;
-}
-.canvas-pencil-wheel input[type="color"]::-webkit-color-swatch {
 	border: none;
-	border-radius: 50%;
-}
-
-/* The visible wheel face (matches the custom-colour SVG): angular gradient,
-   pointer-events:none so the tap falls through to the input beneath. */
-.canvas-pencil-wheel-face {
-	position: absolute;
-	inset: 0;
-	border-radius: 50%;
-	pointer-events: none;
-	background: conic-gradient(
-		from 90deg,
-		#d3523b 0deg,
-		#e1c53b 126.354deg,
-		#6f9b31 240.587deg,
-		#2f65c8 360deg
-	);
+	touch-action: manipulation; /* no double-tap zoom delay on the picker */
 }
 
 /* custom tape image slot ("+" or the user's image) */
