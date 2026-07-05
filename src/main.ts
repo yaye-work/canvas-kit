@@ -5471,7 +5471,9 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 			.setName("Reset to defaults")
 			.setDesc("Restore every Canvas Kit setting above to its default (including the custom tape image).")
 			.addButton((b) =>
-				b.setButtonText("Reset").setDestructive().onClick(async () => {
+				// setWarning (not setDestructive): the latter needs a newer
+				// minAppVersion than we declare; setWarning works on 1.5.0.
+				b.setButtonText("Reset").setWarning().onClick(async () => {
 					this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
 					await this.plugin.saveSettings();
 					this.plugin.applyBottomBarVisibility();
