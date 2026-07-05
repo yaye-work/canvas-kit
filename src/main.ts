@@ -1153,6 +1153,29 @@ class CanvasToolbar {
 		prev.addEventListener("click", () => this.stepSearch(-1));
 		next.addEventListener("click", () => this.stepSearch(1));
 
+		// Dismissing the on-screen keyboard (its hide key) blurs the input but
+		// leaves no reliable viewport signal on iPad — so close the search when
+		// the input loses focus and focus didn't move to another panel control.
+		// In-panel taps (nav/checkbox/Done) briefly blur the field too, so ignore
+		// blurs that immediately follow a pointerdown inside the panel.
+		let ignoreBlurUntil = 0;
+		panel.addEventListener(
+			"pointerdown",
+			() => {
+				ignoreBlurUntil = Date.now() + 400;
+			},
+			true
+		);
+		input.addEventListener("blur", () => {
+			window.setTimeout(() => {
+				if (!this.searchPanelEl) return;
+				if (Date.now() < ignoreBlurUntil) return; // an in-panel tap
+				const ae = this.doc.activeElement;
+				if (ae && this.searchPanelEl.contains(ae)) return; // focus still inside
+				this.closeSearch();
+			}, 150);
+		});
+
 		// Tapping anywhere outside the panel (canvas, toolbar, …) collapses it.
 		this.searchOutside = (e: PointerEvent) => {
 			const t = e.target as Node;
@@ -1166,21 +1189,17 @@ class CanvasToolbar {
 
 		// iPad: the on-screen keyboard overlays the bottom of the view — ride the
 		// visual viewport so the panel stays above it while typing.
-		const vv = this.doc.defaultView?.visualViewport;
+		const win = this.doc.defaultView;
+		const vv = win?.visualViewport;
 		if (vv) {
-			let keyboardWasUp = false;
 			const adjust = () => {
 				if (!this.searchPanelEl) return;
-				const wrapRect = wrap.getBoundingClientRect();
-				const covered = Math.max(0, wrapRect.bottom - (vv.offsetTop + vv.height));
-				// Tablet: once the keyboard has been up, collapsing it (covered
-				// drops back near zero) also collapses the search bar.
-				if (covered > 120) keyboardWasUp = true;
-				else if (keyboardWasUp && covered < 60) {
-					this.closeSearch();
-					return;
-				}
-				this.searchPanelEl.style.bottom = `${18 + covered}px`;
+				// Keyboard height ≈ layout viewport minus the visible (visual)
+				// viewport; independent of where the canvas wrapper sits. Ride it
+				// so the bar stays just above the keyboard. (Closing on dismiss is
+				// handled by the input-blur listener, which is reliable on iPad.)
+				const kb = Math.max(0, win.innerHeight - vv.height - vv.offsetTop);
+				this.searchPanelEl.setCssStyles({ bottom: `${18 + kb}px` });
 			};
 			vv.addEventListener("resize", adjust);
 			vv.addEventListener("scroll", adjust);
