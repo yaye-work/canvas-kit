@@ -556,6 +556,7 @@ interface CanvasNodeLike {
 	startEditing?: () => void;
 	getData?: () => Record<string, unknown>;
 	setData?: (data: Record<string, unknown>) => void;
+	moveAndResize?: (r: { x: number; y: number; width: number; height: number }) => void;
 	unknownData?: Record<string, unknown>;
 }
 
@@ -590,6 +591,7 @@ interface CanvasLike {
 	/** Obsidian's debounced history push (250ms); .run() flushes it immediately. */
 	requestPushHistory?: { run?: () => void };
 	deselectAll?: () => void;
+	selectOnly?: (node: CanvasNodeLike) => void;
 	zoomToBbox?: (bbox: { minX: number; minY: number; maxX: number; maxY: number }) => void;
 	selection?: Set<CanvasNodeLike>;
 	// Viewport + history internals (used for touch pan/zoom and gesture undo).
@@ -1316,6 +1318,11 @@ class CanvasToolbar {
 	private undoTapStart = 0;
 	private undoTapMoved = false;
 	private undoTapMax = 0;
+	// A single multi-finger tap is too easy to trigger by accident at the end of
+	// a pan, so undo/redo needs a DOUBLE multi-finger tap. These remember the
+	// previous qualifying tap to detect the second one.
+	private lastUndoTapAt = 0;
+	private lastUndoTapCount = 0;
 	private undoGestureUnbind: (() => void) | null = null;
 
 	// --- pen (stylus) activity, for palm rejection ---
@@ -1392,10 +1399,10 @@ class CanvasToolbar {
 
 	/**
 	 * Procreate-style undo gestures, bound at the CANVAS level (capture) so they
-	 * work in every mode — select, marquee, or any drawing tool — exactly like
-	 * the built-in undo/redo buttons. A quick multi-finger tap that never moves
-	 * doesn't collide with two-finger pan/zoom (ours or Obsidian's), which
-	 * always moves.
+	 * work in every mode — select, marquee, or any drawing tool. Undo = DOUBLE
+	 * two-finger tap, redo = DOUBLE three-finger tap. Requiring a double tap (vs
+	 * a single one) keeps the tail end of a pan/zoom from firing an accidental
+	 * undo, since a pan never ends in two quick stationary taps.
 	 */
 	private bindUndoGestures() {
 		const wrap = this.view.canvas!.wrapperEl;
@@ -1457,11 +1464,21 @@ class CanvasToolbar {
 				const count = this.undoTapMax;
 				this.undoTapMax = 0;
 				if (isTap) {
-					try {
-						if (count >= 3) this.view.canvas?.redo?.();
-						else this.view.canvas?.undo?.();
-					} catch (err) {
-						console.warn("Canvas Kit: gesture undo failed", err);
+					const now = Date.now();
+					// Second tap of the same finger count, soon after the first →
+					// fire. A lone tap (e.g. the tail of a pan) does nothing.
+					if (now - this.lastUndoTapAt < 450 && this.lastUndoTapCount === count) {
+						this.lastUndoTapAt = 0;
+						this.lastUndoTapCount = 0;
+						try {
+							if (count >= 3) this.view.canvas?.redo?.();
+							else this.view.canvas?.undo?.();
+						} catch (err) {
+							console.warn("Canvas Kit: gesture undo failed", err);
+						}
+					} else {
+						this.lastUndoTapAt = now;
+						this.lastUndoTapCount = count;
 					}
 				}
 			}
@@ -3019,6 +3036,35 @@ class MarkerOverlay extends ToolOverlay {
 	private tapeEnd: { x: number; y: number } | null = null;
 	private tapePreviewEl: HTMLElement;
 	private resizeObserver: ResizeObserver;
+	// Grab-to-select/move: when a press starts ON an object (card/text/table/
+	// image, or a section's label strip), grab it instead of drawing — so you
+	// can rearrange things without leaving the marker.
+	private grabNode: CanvasNodeLike | null = null;
+	private grabDX = 0;
+	private grabDY = 0;
+
+	/** The object to grab at a world point, or null to draw there. Ink is never
+	 * grabbable (so you can draw over strokes); a section is grabbable only near
+	 * its top label strip (so you can still draw inside it). */
+	private hitGrab(wx: number, wy: number): CanvasNodeLike | null {
+		const canvas = this.tb.view.canvas;
+		const hits = (canvas?.getIntersectingNodes?.({
+			minX: wx - 1,
+			minY: wy - 1,
+			maxX: wx + 1,
+			maxY: wy + 1,
+		}) ?? []).filter((n) => !isInkNode(n));
+		if (!hits.length) return null;
+		const area = (n: CanvasNodeLike) => (n.width ?? 0) * (n.height ?? 0);
+		const isGroup = (n: CanvasNodeLike) => n.getData?.().type === "group";
+		// Prefer the smallest non-group object under the point (a card inside a
+		// section wins over the section).
+		const content = hits.filter((n) => !isGroup(n)).sort((a, b) => area(a) - area(b));
+		if (content.length) return content[0];
+		// Only a section here — grab it by its ~28px label strip, else draw.
+		const group = hits.find((n) => wy - (n.y ?? 0) <= 28);
+		return group ?? null;
+	}
 
 	constructor(tb: CanvasToolbar) {
 		super(tb, "canvas-pencil-overlay-marker");
@@ -3042,6 +3088,7 @@ class MarkerOverlay extends ToolOverlay {
 	protected onGestureStart() {
 		this.current = null;
 		this.activePointer = null;
+		this.grabNode = null;
 		this.holdAnchor = null;
 		this.rawPts = null;
 		this.snappedLive = false;
@@ -3090,8 +3137,18 @@ class MarkerOverlay extends ToolOverlay {
 			}
 			el.setPointerCapture(e.pointerId);
 			this.activePointer = e.pointerId;
-			const mode = this.tb.markerMode;
 			const w = this.worldFromClient(e.clientX, e.clientY);
+			// Grab an object if the press starts on one → select/move, not draw.
+			const grab = this.hitGrab(w.x, w.y);
+			if (grab) {
+				this.grabNode = grab;
+				this.grabDX = w.x - (grab.x ?? 0);
+				this.grabDY = w.y - (grab.y ?? 0);
+				this.tb.view.canvas?.selectOnly?.(grab);
+				e.preventDefault();
+				return;
+			}
+			const mode = this.tb.markerMode;
 			if (mode === "erase") {
 				this.eraseAt(w);
 			} else if (mode === "tape") {
@@ -3117,6 +3174,19 @@ class MarkerOverlay extends ToolOverlay {
 		el.addEventListener("pointermove", (e) => {
 			if (this.gesturing()) return;
 			if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
+			// Dragging a grabbed object → move it live (markMoved repositions the
+			// element; save happens once on drop for a single undo step).
+			if (this.grabNode) {
+				const w = this.worldFromClient(e.clientX, e.clientY);
+				this.grabNode.moveAndResize?.({
+					x: w.x - this.grabDX,
+					y: w.y - this.grabDY,
+					width: this.grabNode.width ?? 0,
+					height: this.grabNode.height ?? 0,
+				});
+				e.preventDefault();
+				return;
+			}
 			const mode = this.tb.markerMode;
 			if (mode === "erase") {
 				if (e.buttons & 1) this.eraseAt(this.worldFromClient(e.clientX, e.clientY));
@@ -3167,6 +3237,14 @@ class MarkerOverlay extends ToolOverlay {
 			// mid-stroke must not commit the pen's stroke early.
 			if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
 			this.activePointer = null;
+			// Released a grabbed object → persist its new position as one undo step.
+			if (this.grabNode) {
+				this.grabNode = null;
+				this.canvas.requestSave?.();
+				this.canvas.requestPushHistory?.run?.();
+				e.preventDefault();
+				return;
+			}
 			if (this.tapeStart && this.tapeEnd) {
 				const a = this.tapeStart;
 				const b = this.tapeEnd;
