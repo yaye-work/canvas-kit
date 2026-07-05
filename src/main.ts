@@ -24,6 +24,7 @@ interface CanvasPencilSettings {
 	showTableTool: boolean; // show the table button in the toolbar
 	brushMin: number; // smallest brush size (first slider mark)
 	brushMax: number; // biggest brush size (last slider mark)
+	pencilOnlyDraw: boolean; // tablet: only the Apple Pencil draws; finger pans/selects
 	tapeImageW: number; // natural px width of the stored tape image (0 = legacy square)
 	tapeImageH: number; // natural px height of the stored tape image
 }
@@ -39,6 +40,7 @@ const DEFAULT_SETTINGS: CanvasPencilSettings = {
 	showTableTool: true,
 	brushMin: 2,
 	brushMax: 28,
+	pencilOnlyDraw: true,
 	tapeImageW: 0,
 	tapeImageH: 0,
 };
@@ -2939,7 +2941,7 @@ abstract class ToolOverlay {
 	 * the NEW midpoint after rescaling. Falls back to wheel synthesis if the
 	 * internals ever change shape.
 	 */
-	private applyPanZoom(dx: number, dy: number, ratio: number, cx: number, cy: number) {
+	protected applyPanZoom(dx: number, dy: number, ratio: number, cx: number, cy: number) {
 		const c = this.canvas;
 		if (
 			typeof c.panBy === "function" &&
@@ -3093,6 +3095,7 @@ class MarkerOverlay extends ToolOverlay {
 		this.current = null;
 		this.activePointer = null;
 		this.grabNode = null;
+		this.fingerPan = null;
 		this.holdAnchor = null;
 		this.rawPts = null;
 		this.snappedLive = false;
@@ -3126,6 +3129,8 @@ class MarkerOverlay extends ToolOverlay {
 	 * from any OTHER pointer (a resting palm) are ignored, so palm contacts
 	 * can't inject points, end a stroke early, or start a second one. */
 	private activePointer: number | null = null;
+	/** Pencil-only mode: a finger drag on empty canvas pans instead of drawing. */
+	private fingerPan: { x: number; y: number } | null = null;
 
 	private bind() {
 		const el = this.canvasEl;
@@ -3149,6 +3154,13 @@ class MarkerOverlay extends ToolOverlay {
 				this.grabDX = w.x - (grab.x ?? 0);
 				this.grabDY = w.y - (grab.y ?? 0);
 				this.tb.view.canvas?.selectOnly?.(grab);
+				e.preventDefault();
+				return;
+			}
+			// Apple-Pencil-only: a finger never draws — it pans the canvas instead
+			// (drawing/erasing/taping is reserved for the pen; mouse still draws).
+			if (e.pointerType === "touch" && this.tb.plugin.settings.pencilOnlyDraw) {
+				this.fingerPan = { x: e.clientX, y: e.clientY };
 				e.preventDefault();
 				return;
 			}
@@ -3188,6 +3200,15 @@ class MarkerOverlay extends ToolOverlay {
 					width: this.grabNode.width ?? 0,
 					height: this.grabNode.height ?? 0,
 				});
+				e.preventDefault();
+				return;
+			}
+			// Pencil-only finger pan.
+			if (this.fingerPan) {
+				const dx = e.clientX - this.fingerPan.x;
+				const dy = e.clientY - this.fingerPan.y;
+				this.fingerPan = { x: e.clientX, y: e.clientY };
+				this.applyPanZoom(dx, dy, 1, e.clientX, e.clientY);
 				e.preventDefault();
 				return;
 			}
@@ -3241,6 +3262,10 @@ class MarkerOverlay extends ToolOverlay {
 			// mid-stroke must not commit the pen's stroke early.
 			if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
 			this.activePointer = null;
+			if (this.fingerPan) {
+				this.fingerPan = null;
+				return;
+			}
 			// Released a grabbed object → persist its new position as one undo step.
 			if (this.grabNode) {
 				this.grabNode = null;
@@ -5526,6 +5551,18 @@ class CanvasPencilSettingTab extends PluginSettingTab {
 						this.plugin.settings.inkSmoothing = v / 100;
 						await this.plugin.saveSettings();
 					})
+			);
+
+		new Setting(containerEl)
+			.setName("Draw with Apple Pencil only")
+			.setDesc(
+				"On a tablet, only the Apple Pencil draws, highlights, tapes, and erases — your finger pans the canvas and selects objects instead (palm-friendly). Turn off to draw with a finger too. No effect with a mouse."
+			)
+			.addToggle((t) =>
+				t.setValue(this.plugin.settings.pencilOnlyDraw).onChange(async (v) => {
+					this.plugin.settings.pencilOnlyDraw = v;
+					await this.plugin.saveSettings();
+				})
 			);
 
 		new Setting(containerEl)
