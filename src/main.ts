@@ -2286,12 +2286,10 @@ class CanvasToolbar {
 			});
 			const picker = wheel.createEl("input", { type: "color" });
 			picker.value = /^#[0-9a-f]{6}$/i.test(current) ? current : "#1e1e1e";
-			// Open the native picker on pointerdown — waiting for the synthesized
-			// click costs ~300ms of tap delay on touch devices.
-			picker.addEventListener("pointerdown", (e) => {
-				e.preventDefault();
-				picker.click();
-			});
+			// Let the color input open natively (its own tap → native picker). An
+			// earlier "open on pointerdown + preventDefault + .click()" broke it on
+			// iPad, where the WebView ignores synthetic clicks AND preventDefault
+			// suppresses the native open — so nothing happened at all.
 			picker.addEventListener("input", () => {
 				setColor(picker.value);
 				this.markStyleActive(el, wheel);
