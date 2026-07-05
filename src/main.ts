@@ -1320,11 +1320,6 @@ class CanvasToolbar {
 	private undoTapStart = 0;
 	private undoTapMoved = false;
 	private undoTapMax = 0;
-	// A single multi-finger tap is too easy to trigger by accident at the end of
-	// a pan, so undo/redo needs a DOUBLE multi-finger tap. These remember the
-	// previous qualifying tap to detect the second one.
-	private lastUndoTapAt = 0;
-	private lastUndoTapCount = 0;
 	private undoGestureUnbind: (() => void) | null = null;
 
 	// --- pen (stylus) activity, for palm rejection ---
@@ -1401,10 +1396,10 @@ class CanvasToolbar {
 
 	/**
 	 * Procreate-style undo gestures, bound at the CANVAS level (capture) so they
-	 * work in every mode — select, marquee, or any drawing tool. Undo = DOUBLE
-	 * two-finger tap, redo = DOUBLE three-finger tap. Requiring a double tap (vs
-	 * a single one) keeps the tail end of a pan/zoom from firing an accidental
-	 * undo, since a pan never ends in two quick stationary taps.
+	 * work in every mode — select, marquee, or any drawing tool. Undo = two-
+	 * finger tap, redo = three-finger tap. Safe against accidental fires because
+	 * panning is one-finger (pencil-only mode) and any real pan/pinch moves past
+	 * the tap threshold, so two/three fingers tapping is always deliberate.
 	 */
 	private bindUndoGestures() {
 		const wrap = this.view.canvas!.wrapperEl;
@@ -1466,21 +1461,11 @@ class CanvasToolbar {
 				const count = this.undoTapMax;
 				this.undoTapMax = 0;
 				if (isTap) {
-					const now = Date.now();
-					// Second tap of the same finger count, soon after the first →
-					// fire. A lone tap (e.g. the tail of a pan) does nothing.
-					if (now - this.lastUndoTapAt < 450 && this.lastUndoTapCount === count) {
-						this.lastUndoTapAt = 0;
-						this.lastUndoTapCount = 0;
-						try {
-							if (count >= 3) this.view.canvas?.redo?.();
-							else this.view.canvas?.undo?.();
-						} catch (err) {
-							console.warn("Canvas Kit: gesture undo failed", err);
-						}
-					} else {
-						this.lastUndoTapAt = now;
-						this.lastUndoTapCount = count;
+					try {
+						if (count >= 3) this.view.canvas?.redo?.();
+						else this.view.canvas?.undo?.();
+					} catch (err) {
+						console.warn("Canvas Kit: gesture undo failed", err);
 					}
 				}
 			}
