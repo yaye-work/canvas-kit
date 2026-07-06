@@ -3027,17 +3027,10 @@ class MarkerOverlay extends ToolOverlay {
 	private tapeEnd: { x: number; y: number } | null = null;
 	private tapePreviewEl: HTMLElement;
 	private resizeObserver: ResizeObserver;
-	// Grab-to-select/move: when a press starts ON an object (card/text/table/
-	// image, or a section's label strip), grab it instead of drawing — so you
-	// can rearrange things without leaving the marker.
-	private grabNode: CanvasNodeLike | null = null;
-	private grabDX = 0;
-	private grabDY = 0;
-
-	/** The object to grab at a world point, or null to draw there. Ink is never
-	 * grabbable (so you can draw over strokes); a section is grabbable only near
-	 * its top label strip (so you can still draw inside it). */
-	private hitGrab(wx: number, wy: number): CanvasNodeLike | null {
+	/** The object under a finger tap, so it can be SELECTED (tablet only). The
+	 * pen never selects/moves — it always draws. Ink is never a target (so you
+	 * can draw over strokes); a section counts only near its top label strip. */
+	private objectAt(wx: number, wy: number): CanvasNodeLike | null {
 		const canvas = this.tb.view.canvas;
 		const hits = (canvas?.getIntersectingNodes?.({
 			minX: wx - 1,
@@ -3079,8 +3072,8 @@ class MarkerOverlay extends ToolOverlay {
 	protected onGestureStart() {
 		this.current = null;
 		this.activePointer = null;
-		this.grabNode = null;
 		this.fingerPan = null;
+		this.fingerHit = null;
 		this.holdAnchor = null;
 		this.rawPts = null;
 		this.snappedLive = false;
@@ -3114,8 +3107,11 @@ class MarkerOverlay extends ToolOverlay {
 	 * from any OTHER pointer (a resting palm) are ignored, so palm contacts
 	 * can't inject points, end a stroke early, or start a second one. */
 	private activePointer: number | null = null;
-	/** Pencil-only mode: a finger drag on empty canvas pans instead of drawing. */
-	private fingerPan: { x: number; y: number } | null = null;
+	/** Pencil-only mode: a finger drag pans; a finger tap selects (see fingerHit).
+	 * sx/sy are the start point, to tell a tap from a pan. */
+	private fingerPan: { x: number; y: number; sx: number; sy: number } | null = null;
+	/** The object under a finger's press — selected on tap, ignored on pan/drag. */
+	private fingerHit: CanvasNodeLike | null = null;
 
 	private bind() {
 		const el = this.canvasEl;
@@ -3132,20 +3128,11 @@ class MarkerOverlay extends ToolOverlay {
 			el.setPointerCapture(e.pointerId);
 			this.activePointer = e.pointerId;
 			const w = this.worldFromClient(e.clientX, e.clientY);
-			// Grab an object if the press starts on one → select/move, not draw.
-			const grab = this.hitGrab(w.x, w.y);
-			if (grab) {
-				this.grabNode = grab;
-				this.grabDX = w.x - (grab.x ?? 0);
-				this.grabDY = w.y - (grab.y ?? 0);
-				this.tb.view.canvas?.selectOnly?.(grab);
-				e.preventDefault();
-				return;
-			}
-			// Apple-Pencil-only: a finger never draws — it pans the canvas instead
-			// (drawing/erasing/taping is reserved for the pen; mouse still draws).
+			// Apple-Pencil-only: a finger never draws or moves things — it pans on
+			// a drag and selects on a tap (the pen always draws, even over objects).
 			if (e.pointerType === "touch" && this.tb.plugin.settings.pencilOnlyDraw) {
-				this.fingerPan = { x: e.clientX, y: e.clientY };
+				this.fingerPan = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY };
+				this.fingerHit = this.objectAt(w.x, w.y);
 				e.preventDefault();
 				return;
 			}
@@ -3175,24 +3162,12 @@ class MarkerOverlay extends ToolOverlay {
 		el.addEventListener("pointermove", (e) => {
 			if (this.gesturing()) return;
 			if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
-			// Dragging a grabbed object → move it live (markMoved repositions the
-			// element; save happens once on drop for a single undo step).
-			if (this.grabNode) {
-				const w = this.worldFromClient(e.clientX, e.clientY);
-				this.grabNode.moveAndResize?.({
-					x: w.x - this.grabDX,
-					y: w.y - this.grabDY,
-					width: this.grabNode.width ?? 0,
-					height: this.grabNode.height ?? 0,
-				});
-				e.preventDefault();
-				return;
-			}
 			// Pencil-only finger pan.
 			if (this.fingerPan) {
 				const dx = e.clientX - this.fingerPan.x;
 				const dy = e.clientY - this.fingerPan.y;
-				this.fingerPan = { x: e.clientX, y: e.clientY };
+				this.fingerPan.x = e.clientX;
+				this.fingerPan.y = e.clientY;
 				this.applyPanZoom(dx, dy, 1, e.clientX, e.clientY);
 				e.preventDefault();
 				return;
@@ -3248,15 +3223,14 @@ class MarkerOverlay extends ToolOverlay {
 			if (this.activePointer !== null && e.pointerId !== this.activePointer) return;
 			this.activePointer = null;
 			if (this.fingerPan) {
+				const fp = this.fingerPan;
+				const hit = this.fingerHit;
 				this.fingerPan = null;
-				return;
-			}
-			// Released a grabbed object → persist its new position as one undo step.
-			if (this.grabNode) {
-				this.grabNode = null;
-				this.canvas.requestSave?.();
-				this.canvas.requestPushHistory?.run?.();
-				e.preventDefault();
+				this.fingerHit = null;
+				// A tap (not a pan) that landed on an object → select it.
+				if (hit && Math.hypot(e.clientX - fp.sx, e.clientY - fp.sy) <= 6) {
+					this.canvas.selectOnly?.(hit);
+				}
 				return;
 			}
 			if (this.tapeStart && this.tapeEnd) {
