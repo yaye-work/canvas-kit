@@ -1660,6 +1660,37 @@ class CanvasToolbar {
 		window.setTimeout(pin, 700);
 	}
 
+	/**
+	 * iPad/mobile: while the inline text editor is open, the on-screen keyboard's
+	 * visual-viewport resize can scroll the whole app up, shoving the canvas (and
+	 * the text being typed) out of view. Pin every scrollable ancestor back to 0
+	 * for as long as the editor lives. Returns an unbind to call on commit; no-op
+	 * off mobile (desktop relies on the browser's normal focus handling).
+	 */
+	pinTextEditorViewport(): () => void {
+		const win = this.doc.defaultView;
+		if (!Platform.isMobile || !win) return () => {};
+		const vv = win.visualViewport;
+		const pin = () => {
+			win.scrollTo(0, 0);
+			let el: HTMLElement | null = this.view.canvas?.wrapperEl ?? null;
+			while (el) {
+				if (el.scrollTop) el.scrollTop = 0;
+				if (el.scrollLeft) el.scrollLeft = 0;
+				el = el.parentElement;
+			}
+		};
+		win.addEventListener("scroll", pin, true);
+		vv?.addEventListener("resize", pin);
+		vv?.addEventListener("scroll", pin);
+		pin();
+		return () => {
+			win.removeEventListener("scroll", pin, true);
+			vv?.removeEventListener("resize", pin);
+			vv?.removeEventListener("scroll", pin);
+		};
+	}
+
 	// --- draw sub toolbar: [size] | [colors or tape patterns] ---
 
 	private showMarkerSubBar() {
@@ -2438,10 +2469,13 @@ class CanvasToolbar {
 		ta.addEventListener("mousedown", (e) => e.stopPropagation());
 
 		let committed = false;
+		let unpin: (() => void) | null = null;
 		const handle: TextEditorHandle = {
 			commit: () => {
 				if (committed) return;
 				committed = true;
+				unpin?.();
+				unpin = null;
 				const val = ta.value;
 				ta.remove();
 				if (this.activeTextEditor === handle) this.activeTextEditor = null;
@@ -2526,8 +2560,13 @@ class CanvasToolbar {
 		});
 		ta.addEventListener("blur", () => handle.commit());
 		this.activeTextEditor = handle;
+		// iPad/mobile: keep the keyboard from scrolling the canvas out of view
+		// while typing (see pinTextEditorViewport). Released on commit.
+		unpin = this.pinTextEditorViewport();
 		window.setTimeout(() => {
-			ta.focus();
+			// preventScroll: focusing must NOT make the WebView scroll the app up
+			// to "reveal" the input — that's what pushed the canvas/text off-screen.
+			ta.focus({ preventScroll: true });
 			const len = ta.value.length;
 			ta.setSelectionRange(len, len);
 		}, 0);
