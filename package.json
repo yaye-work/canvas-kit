@@ -1,6 +1,6 @@
 {
   "name": "canvas-kit",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "A FigJam-style annotation toolbar for Obsidian Canvas.",
   "main": "main.js",
   "scripts": {
