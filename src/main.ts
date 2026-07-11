@@ -383,7 +383,7 @@ function strokeCorners(pts: Point[], area: number): { count: number; tri: [numbe
 	const K = 5; // turning measured over ±K samples; a circle's base turn at
 	// this window is 2π·2K/N ≈ 0.49 rad, safely under the 0.7 corner threshold
 	const rs = resampleClosed(pts, N);
-	const turn: number[] = new Array(N);
+	const turn: number[] = new Array<number>(N);
 	for (let i = 0; i < N; i++) {
 		const p0 = rs[(i - K + N) % N];
 		const p1 = rs[i];
