@@ -349,10 +349,83 @@ const shapeSampleLine = (a: [number, number], b: [number, number], n: number): P
 	return pts;
 };
 
+/** Uniform arc-length resample of a closed loop (the closing segment counts). */
+function resampleClosed(pts: Point[], n: number): [number, number][] {
+	const src: [number, number][] = pts.map((p) => [p[0], p[1]]);
+	src.push([pts[0][0], pts[0][1]]);
+	const cum = [0];
+	for (let i = 1; i < src.length; i++) {
+		cum.push(cum[i - 1] + Math.hypot(src[i][0] - src[i - 1][0], src[i][1] - src[i - 1][1]));
+	}
+	const total = cum[cum.length - 1];
+	const out: [number, number][] = [];
+	let j = 0;
+	for (let i = 0; i < n; i++) {
+		const d = (i / n) * total;
+		while (j < src.length - 2 && cum[j + 1] < d) j++;
+		const t = (d - cum[j]) / Math.max(1e-9, cum[j + 1] - cum[j]);
+		out.push([
+			src[j][0] + (src[j + 1][0] - src[j][0]) * t,
+			src[j][1] + (src[j + 1][1] - src[j][1]) * t,
+		]);
+	}
+	return out;
+}
+
 /**
- * Classify a freehand stroke as a clean line, ellipse, or rectangle and return
- * replacement points, or null when it doesn't confidently match any shape.
- * Rotation-aware: tilted rectangles and ellipses snap at their drawn angle.
+ * Count sharp turning-angle peaks (physical corners) on the resampled loop.
+ * When exactly three, and their vertex polygon covers about the same area as
+ * the stroke (a circle with three noise spikes triangulates to only ~0.4 of
+ * its area), also return the triangle's corners in stroke order.
+ */
+function strokeCorners(pts: Point[], area: number): { count: number; tri: [number, number][] | null } {
+	const N = 128;
+	const K = 5; // turning measured over ±K samples; a circle's base turn at
+	// this window is 2π·2K/N ≈ 0.49 rad, safely under the 0.7 corner threshold
+	const rs = resampleClosed(pts, N);
+	const turn: number[] = new Array(N);
+	for (let i = 0; i < N; i++) {
+		const p0 = rs[(i - K + N) % N];
+		const p1 = rs[i];
+		const p2 = rs[(i + K) % N];
+		const a1 = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
+		const a2 = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]);
+		let d = a2 - a1;
+		while (d > Math.PI) d -= 2 * Math.PI;
+		while (d < -Math.PI) d += 2 * Math.PI;
+		turn[i] = Math.abs(d);
+	}
+	// Greedy peak pick with non-max suppression: strongest corners first, each
+	// suppressing an N/8 neighborhood so one physical corner counts once.
+	const byStrength = [...turn.keys()].sort((x, y) => turn[y] - turn[x]);
+	const picked: number[] = [];
+	const MINSEP = N / 8;
+	for (const i of byStrength) {
+		if (turn[i] < 0.7) break;
+		const clear = picked.every((p) => {
+			const d = Math.abs(p - i);
+			return Math.min(d, N - d) > MINSEP;
+		});
+		if (clear) picked.push(i);
+	}
+	if (picked.length !== 3) return { count: picked.length, tri: null };
+	picked.sort((x, y) => x - y);
+	const tri = picked.map((i) => rs[i]);
+	let area2 = 0;
+	for (let i = 0; i < 3; i++) {
+		const [x1, y1] = tri[i];
+		const [x2, y2] = tri[(i + 1) % 3];
+		area2 += x1 * y2 - x2 * y1;
+	}
+	const triArea = Math.abs(area2) / 2;
+	if (triArea < 0.72 * area || triArea > 1.35 * area) return { count: 3, tri: null };
+	return { count: 3, tri };
+}
+
+/**
+ * Classify a freehand stroke as a clean line, triangle, ellipse, or rectangle
+ * and return replacement points, or null when it doesn't confidently match any
+ * shape. Rotation-aware: tilted shapes snap at their drawn angle.
  */
 function quickShapeFor(raw: Point[]): { pts: Point[]; closed: boolean } | null {
 	if (raw.length < 8) return null;
@@ -412,6 +485,21 @@ function quickShapeFor(raw: Point[]): { pts: Point[]; closed: boolean } | null {
 		area2 += x1 * y2 - x2 * y1;
 	}
 	const area = Math.abs(area2) / 2;
+
+	// --- triangle: three sharp corners joined by straight-ish sides ---
+	const { count: cornerPeaks, tri } = strokeCorners(pts, area);
+	if (cornerPeaks >= 5) return null; // pentagon+ — leave it freehand
+	if (tri) {
+		const n = 16;
+		return {
+			pts: [
+				...shapeSampleLine(tri[0], tri[1], n).slice(0, -1),
+				...shapeSampleLine(tri[1], tri[2], n).slice(0, -1),
+				...shapeSampleLine(tri[2], tri[0], n).slice(0, -1),
+			],
+			closed: true,
+		};
+	}
 
 	// Find the MINIMUM-AREA rotated bounding box (brute force over 2° steps —
 	// cheap, and rotation-aware so a tilted rectangle still reads as one).
@@ -477,33 +565,22 @@ function quickShapeFor(raw: Point[]): { pts: Point[]; closed: boolean } | null {
 	for (const r of rr) variance += (r - mean) * (r - mean);
 	const spread = Math.sqrt(variance / rr.length) / mean;
 
-	// Corner occupancy: how many of the box's 4 corner regions contain points.
-	// A rectangle (even with rounded corners) reaches into all 4; an ellipse
-	// can't reach any (|u|,|v| both > 0.72 needs normalized radius > 1); a bean
-	// or D-shape fills only some. This separates sloppy rects from blobs where
-	// area ratio and radial spread overlap.
-	const cornerCount = (depth: number): number => {
-		const seen = new Set<number>();
-		for (const r of pts) {
-			const u = (r[0] * cos + r[1] * sin - cu) / a;
-			const v = (-r[0] * sin + r[1] * cos - cv) / b;
-			if (Math.abs(u) > depth && Math.abs(v) > depth) {
-				seen.add((u > 0 ? 1 : 0) + (v > 0 ? 2 : 0));
-			}
-		}
-		return seen.size;
-	};
-	const corners = cornerCount(0.72);
+	// Edge hug: mean distance (normalized box units) from each point to the
+	// nearest box edge. A rectangle's points ride the edges the whole way
+	// (≈0.02 even drawn sloppily); an ellipse pulls away from them between the
+	// four axis touch-points (ideal circle ≈ 0.10). Unlike corner-occupancy
+	// counting, one wobbly bulge can't flip the verdict — the whole stroke votes.
+	let edgeGap = 0;
+	for (const [x, y] of pts) {
+		const nu = Math.abs((x * cos + y * sin - cu) / a);
+		const nv = Math.abs((-x * sin + y * cos - cv) / b);
+		edgeGap += 1 - Math.min(1, Math.max(nu, nv));
+	}
+	edgeGap /= pts.length;
 
-	const isEllipse = corners <= 1 && spread < 0.09 && areaRatio < 0.86;
-	// Rect: all 4 shallow corner regions occupied AND either deep-corner points
-	// (a bean's lobes graze the shallow corners but never the deep ones) or a
-	// box-filling area a bean can't reach.
-	const isRect =
-		!isEllipse &&
-		corners === 4 &&
-		areaRatio > 0.7 &&
-		(cornerCount(0.8) >= 1 || areaRatio > 0.85);
+	const isEllipse =
+		cornerPeaks < 4 && spread < 0.12 && edgeGap > 0.065 && areaRatio < 0.88;
+	const isRect = !isEllipse && edgeGap < 0.055 && areaRatio > 0.72;
 
 	if (isRect) {
 		// rectangle: snap to the min-area box (keeps the drawn tilt)
