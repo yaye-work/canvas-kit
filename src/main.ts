@@ -604,6 +604,9 @@ interface CanvasLike {
 	scale?: number;
 	undo?: () => void;
 	redo?: () => void;
+	getData?: () => unknown;
+	history?: { data: unknown[]; current: number };
+	pushHistory?: (data: unknown) => void;
 	getIntersectingNodes?: (bbox: {
 		minX: number;
 		minY: number;
@@ -5394,6 +5397,13 @@ function commitInkNode(
 	const canvas = tb.view.canvas!;
 	if (typeof canvas.createTextNode !== "function") {
 		throw new Error("canvas.createTextNode unavailable");
+	}
+	// An empty canvas never gets a baseline history entry (Obsidian's setData
+	// calls createPlaceholder instead of pushHistory), so the first stroke's
+	// snapshot lands at index 0 and canUndo() stays false forever. Push the
+	// pre-stroke state as the baseline so the first ink is undoable.
+	if (canvas.history?.data.length === 0) {
+		canvas.pushHistory?.(canvas.getData?.());
 	}
 	const node = canvas.createTextNode({
 		pos: { x: ink.box.x, y: ink.box.y },
