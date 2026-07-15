@@ -90,6 +90,3 @@ It's genuinely appreciated.
 Happy noting! 
 Yaye
 
-Happy drawing!
-Yaye
-
